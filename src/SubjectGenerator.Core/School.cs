@@ -1,8 +1,8 @@
 namespace SubjectGenerator.Core;
 
 /// <summary>
-/// Everything the school has: classes, subjects, teachers, who teaches what to which class,
-/// the shape of the week, and each class's timetable.
+/// Everything the school has: classes, subjects, teachers, who teaches what to which class (and how
+/// often), the shape of the week, and each class's timetable.
 /// All changes go through the methods here, so the data always follows the rules
 /// (unique names, no assignment pointing at something that was deleted).
 /// </summary>
@@ -19,7 +19,8 @@ public sealed class School
         Layout = layout;
     }
 
-    public WeekLayout Layout { get; }
+    /// <summary>The school's week. Change it with <see cref="ChangeWeek"/>.</summary>
+    public WeekLayout Layout { get; private set; }
 
     public IReadOnlyList<SchoolClass> Classes => _classes;
 
@@ -30,7 +31,40 @@ public sealed class School
     public IReadOnlyList<TeachingAssignment> Assignments => _assignments;
 
     /// <summary>The most lessons a subject can have in a week: every slot of the week.</summary>
-    public int MaxLessonsPerWeek => Layout.DayCount * Layout.SlotsPerDay;
+    public int MaxLessonsPerWeek => Layout.SlotCount;
+
+    // ----- Week -----
+
+    /// <summary>
+    /// Changes the school days and the number of lessons a day. Timetables are emptied (they no longer
+    /// fit the new week). Teachers keep their days off on the days that are still in the week.
+    /// </summary>
+    public void ChangeWeek(WeekLayout layout)
+    {
+        var tooMany = _assignments.FirstOrDefault(a => a.LessonsPerWeek > layout.SlotCount);
+        if (tooMany is not null)
+            throw new SchoolRuleException(
+                $"{tooMany.Class.Name} sinfida {tooMany.Subject.Name} haftasiga {tooMany.LessonsPerWeek} ta, " +
+                $"lekin yangi haftada faqat {layout.SlotCount} ta soat bor.");
+
+        foreach (var teacher in _teachers)
+        {
+            var dayOffNames = teacher.DaysOff.Select(d => Layout.DayNames[d]).ToList();
+            foreach (var day in teacher.DaysOff.ToList())
+                teacher.SetDayOff(day, false);
+
+            var newDaysOff = dayOffNames.Select(name => IndexOf(layout.DayNames, name)).Where(d => d >= 0).ToList();
+            if (newDaysOff.Count < layout.DayCount) // a teacher must keep at least one working day
+                foreach (var day in newDaysOff)
+                    teacher.SetDayOff(day, true);
+        }
+
+        foreach (var subject in _subjects)
+            subject.LessonsPerWeek = Math.Min(subject.LessonsPerWeek, layout.SlotCount);
+
+        Layout = layout;
+        _timetables.Clear();
+    }
 
     // ----- Classes -----
 
@@ -53,6 +87,13 @@ public sealed class School
         _assignments.RemoveAll(a => a.Class == schoolClass);
     }
 
+    /// <summary>The class's weekly plan: every subject it has, with teacher and lessons a week.</summary>
+    public IEnumerable<TeachingAssignment> AssignmentsOf(SchoolClass schoolClass) =>
+        _assignments.Where(a => a.Class == schoolClass);
+
+    /// <summary>All lessons the class has in a week.</summary>
+    public int LessonsPerWeekOf(SchoolClass schoolClass) => AssignmentsOf(schoolClass).Sum(a => a.LessonsPerWeek);
+
     // ----- Subjects -----
 
     public Subject AddSubject(string name, int lessonsPerWeek)
@@ -67,9 +108,15 @@ public sealed class School
         return subject;
     }
 
+    /// <summary>
+    /// Changes the subject's usual number of lessons a week. Classes that had the old usual number
+    /// get the new one too; classes that were given their own number keep it.
+    /// </summary>
     public void SetLessonsPerWeek(Subject subject, int lessonsPerWeek)
     {
         CheckLessonsPerWeek(lessonsPerWeek);
+        foreach (var assignment in _assignments.Where(a => a.Subject == subject && a.LessonsPerWeek == subject.LessonsPerWeek))
+            assignment.LessonsPerWeek = lessonsPerWeek;
         subject.LessonsPerWeek = lessonsPerWeek;
     }
 
@@ -111,27 +158,48 @@ public sealed class School
         _assignments.RemoveAll(a => a.Teacher == teacher);
     }
 
+    public IEnumerable<TeachingAssignment> AssignmentsOf(Teacher teacher) =>
+        _assignments.Where(a => a.Teacher == teacher);
+
+    /// <summary>All lessons the teacher has in a week.</summary>
+    public int LessonsPerWeekOf(Teacher teacher) => AssignmentsOf(teacher).Sum(a => a.LessonsPerWeek);
+
     // ----- Who teaches what -----
 
     /// <summary>
-    /// The teacher will teach the subject to the class. A class has one teacher per subject,
+    /// The teacher will teach the subject to the class, <paramref name="lessonsPerWeek"/> times a week
+    /// (the subject's usual number if not given). A class has one teacher per subject,
     /// so if another teacher already has it, that is an error (remove theirs first).
     /// </summary>
-    public TeachingAssignment Assign(Teacher teacher, Subject subject, SchoolClass schoolClass)
+    public TeachingAssignment Assign(Teacher teacher, Subject subject, SchoolClass schoolClass, int? lessonsPerWeek = null)
     {
         if (!_teachers.Contains(teacher) || !_subjects.Contains(subject) || !_classes.Contains(schoolClass))
             throw new ArgumentException("The teacher, subject and class must all belong to this school.");
 
-        var existing = TeacherOf(subject, schoolClass);
-        if (existing == teacher)
-            return _assignments.First(a => a.Subject == subject && a.Class == schoolClass);
+        var lessons = lessonsPerWeek ?? subject.LessonsPerWeek;
+        CheckLessonsPerWeek(lessons);
+
+        var existing = _assignments.FirstOrDefault(a => a.Subject == subject && a.Class == schoolClass);
+        if (existing is not null && existing.Teacher == teacher)
+        {
+            if (lessonsPerWeek is not null)
+                existing.LessonsPerWeek = lessons;
+            return existing;
+        }
         if (existing is not null)
             throw new SchoolRuleException(
-                $"{schoolClass.Name} sinfida {subject.Name} fanini {existing.Name} o'qitadi.");
+                $"{schoolClass.Name} sinfida {subject.Name} fanini {existing.Teacher.Name} o'qitadi.");
 
-        var assignment = new TeachingAssignment(teacher, subject, schoolClass);
+        var assignment = new TeachingAssignment(teacher, subject, schoolClass, lessons);
         _assignments.Add(assignment);
         return assignment;
+    }
+
+    /// <summary>Changes how many lessons a week this one class gets of the subject.</summary>
+    public void SetLessonsPerWeek(TeachingAssignment assignment, int lessonsPerWeek)
+    {
+        CheckLessonsPerWeek(lessonsPerWeek);
+        assignment.LessonsPerWeek = lessonsPerWeek;
     }
 
     public void Unassign(TeachingAssignment assignment) => _assignments.Remove(assignment);
@@ -139,9 +207,6 @@ public sealed class School
     /// <summary>Who teaches the subject in the class, or null if nobody has been chosen yet.</summary>
     public Teacher? TeacherOf(Subject subject, SchoolClass schoolClass) =>
         _assignments.FirstOrDefault(a => a.Subject == subject && a.Class == schoolClass)?.Teacher;
-
-    public IEnumerable<TeachingAssignment> AssignmentsOf(Teacher teacher) =>
-        _assignments.Where(a => a.Teacher == teacher);
 
     // ----- Timetables -----
 
@@ -162,6 +227,17 @@ public sealed class School
     /// <summary>Empties every class's timetable.</summary>
     public void ClearTimetables() => _timetables.Clear();
 
+    /// <summary>True if any class has at least one lesson in its timetable.</summary>
+    public bool HasAnyLessons()
+    {
+        foreach (var timetable in _timetables.Values)
+            for (var day = 0; day < Layout.DayCount; day++)
+                for (var slot = 0; slot < Layout.SlotsPerDay; slot++)
+                    if (timetable.Get(day, slot) is not null)
+                        return true;
+        return false;
+    }
+
     // ----- Helpers -----
 
     private void CheckLessonsPerWeek(int lessonsPerWeek)
@@ -180,4 +256,12 @@ public sealed class School
     /// <summary>"5-a" and "5-A" count as the same name.</summary>
     private static bool SameName(string a, string b) =>
         string.Equals(a, b, StringComparison.CurrentCultureIgnoreCase);
+
+    private static int IndexOf(IReadOnlyList<string> list, string item)
+    {
+        for (var i = 0; i < list.Count; i++)
+            if (list[i] == item)
+                return i;
+        return -1;
+    }
 }

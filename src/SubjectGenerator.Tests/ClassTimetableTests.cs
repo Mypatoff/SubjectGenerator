@@ -6,7 +6,7 @@ namespace SubjectGenerator.Tests;
 public class ClassTimetableTests
 {
     private static ClassTimetable NewTimetable() =>
-        new(new SchoolClass("5-A"), WeekLayout.Default);
+        new(new SchoolClass("5-A"), TestWeek.SixBySeven);
 
     [Fact]
     public void NewTimetable_HasEveryScheduledSlotEmpty()

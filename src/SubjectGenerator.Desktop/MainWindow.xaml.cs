@@ -34,7 +34,7 @@ public partial class MainWindow : Window
         var path = SchoolStorage.DefaultPath;
         try
         {
-            return SchoolStorage.Load(path, WeekLayout.Default);
+            return SchoolStorage.Load(path);
         }
         catch (Exception ex)
         {
@@ -69,7 +69,7 @@ public partial class MainWindow : Window
 
         ClassPickerText.Text = _selectedClass.Name;
         ShowTimetable(_school.TimetableFor(_selectedClass));
-        EmptyTimetableHint.Visibility = HasAnyLessons() ? Visibility.Collapsed : Visibility.Visible;
+        EmptyTimetableHint.Visibility = _school.HasAnyLessons() ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void OnSettingsClick(object sender, RoutedEventArgs e)
@@ -89,7 +89,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (HasAnyLessons() && MessageBox.Show(this,
+        if (_school.HasAnyLessons() && MessageBox.Show(this,
                 "Hozirgi jadval o'chirilib, hamma sinflar uchun yangi jadval tuziladi. Davom etilsinmi?",
                 "Jadval tuzish", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             return;
@@ -112,19 +112,6 @@ public partial class MainWindow : Window
         SaveSchool();
         Refresh();
         ShowGenerationReport(result);
-    }
-
-    private bool HasAnyLessons()
-    {
-        foreach (var schoolClass in _school.Classes)
-        {
-            var timetable = _school.TimetableFor(schoolClass);
-            for (var day = 0; day < _school.Layout.DayCount; day++)
-                for (var slot = 0; slot < _school.Layout.SlotsPerDay; slot++)
-                    if (timetable.Get(day, slot) is not null)
-                        return true;
-        }
-        return false;
     }
 
     private void ShowGenerationReport(GenerationResult result)

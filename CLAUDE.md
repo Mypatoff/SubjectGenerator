@@ -25,8 +25,12 @@ compiles the WPF app there too. Linux box: `dotnet test src/SubjectGenerator.Tes
 (WPF needs Windows), and `dotnet sln add` refuses the Desktop project - edit the .sln by hand.
 
 ## Product decisions so far
-- Week: Monday-Saturday, 7 slots a day (`WeekLayout.Default`, easy to change).
-- User enters classes, subjects (lessons per week), teachers, and which teacher teaches which subject.
+- Week: chosen in Settings > Hafta (school days + one fixed number of lessons a day; default Mon-Sat x 8).
+  Classes may have fewer lessons on some days (lessons are spread evenly, no gaps).
+- User enters classes, subjects (usual lessons per week), teachers, and which teacher teaches which subject
+  in which class. Lessons per week can differ per class (stored on `TeachingAssignment`), because real
+  data (a college workload plan) has e.g. Ingliz tili 10/week in one group and 2 in another.
+- A class's subjects are exactly its assignments: not every class has every subject.
 - No rooms, no special cases (double lessons, split groups) for now. Manual editing of generated
   timetables is wanted.
 
@@ -34,9 +38,11 @@ compiles the WPF app there too. Linux box: `dotnet test src/SubjectGenerator.Tes
 - [x] Main screen: searchable class drop-down on top, week grid for the selected class, Settings button
 - [x] Settings window: classes, subjects (lessons per week), teachers, which teacher teaches which
       subject in which classes (one teacher per subject per class; a teacher can have many)
-- [x] Saving data: JSON at %AppData%\SubjectGenerator\school.json (`SchoolStorage`, format version 2
-      with a v1->v2 migration, saved after every change). Includes teachers' days off and timetables.
+- [x] Saving data: JSON at %AppData%\SubjectGenerator\school.json (`SchoolStorage`, format version 3
+      with v1->v2->v3 migrations, saved after every change). Includes teachers' days off and timetables.
 - [x] Teacher days off (Settings > O'qituvchilar)
+- [x] Per-class lessons per week (Settings > Sinflar shows each class's plan and total)
+- [x] Week settings (Settings > Hafta)
 - [x] Timetable generation ("Jadval tuzish" button, `TimetableGenerator`): all classes at once; never a
       teacher in two classes at once or on a day off; tries for no gaps and subjects spread over the week
 - [ ] Manual editing of slots

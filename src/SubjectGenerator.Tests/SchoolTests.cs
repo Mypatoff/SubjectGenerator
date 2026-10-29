@@ -5,7 +5,7 @@ namespace SubjectGenerator.Tests;
 
 public class SchoolTests
 {
-    private static School NewSchool() => new(WeekLayout.Default);
+    private static School NewSchool() => new(TestWeek.SixBySeven);
 
     [Fact]
     public void NewSchool_IsEmpty()
@@ -57,7 +57,7 @@ public class SchoolTests
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
-    [InlineData(43)] // the default week has 6 x 7 = 42 slots
+    [InlineData(43)] // the test week has 6 x 7 = 42 slots
     public void LessonsPerWeek_MustFitInTheWeek(int lessons)
     {
         var school = NewSchool();
@@ -77,6 +77,122 @@ public class SchoolTests
         school.SetLessonsPerWeek(subject, 4);
 
         Assert.Equal(4, subject.LessonsPerWeek);
+    }
+
+    [Fact]
+    public void Assign_UsesTheSubjectsUsualNumber_UnlessGivenOne()
+    {
+        var school = NewSchool();
+        var english = school.AddSubject("Ingliz tili", 10);
+        var teacher = school.AddTeacher("Qashiboev");
+
+        var usual = school.Assign(teacher, english, school.AddClass("40"));
+        var own = school.Assign(teacher, english, school.AddClass("43"), lessonsPerWeek: 2);
+
+        Assert.Equal(10, usual.LessonsPerWeek);
+        Assert.Equal(2, own.LessonsPerWeek);
+        Assert.Equal(12, school.LessonsPerWeekOf(teacher));
+    }
+
+    [Fact]
+    public void SetLessonsPerWeek_ForOneClass_ChangesOnlyThatClass()
+    {
+        var school = NewSchool();
+        var english = school.AddSubject("Ingliz tili", 10);
+        var teacher = school.AddTeacher("Qashiboev");
+        var a = school.Assign(teacher, english, school.AddClass("40"));
+        var b = school.Assign(teacher, english, school.AddClass("41"));
+
+        school.SetLessonsPerWeek(b, 3);
+
+        Assert.Equal(10, a.LessonsPerWeek);
+        Assert.Equal(3, b.LessonsPerWeek);
+        Assert.Throws<SchoolRuleException>(() => school.SetLessonsPerWeek(b, 0));
+        Assert.Throws<SchoolRuleException>(() => school.SetLessonsPerWeek(b, 43));
+    }
+
+    [Fact]
+    public void ChangingTheUsualNumber_UpdatesClassesThatHadIt_ButNotOwnNumbers()
+    {
+        var school = NewSchool();
+        var english = school.AddSubject("Ingliz tili", 10);
+        var teacher = school.AddTeacher("Qashiboev");
+        var usual = school.Assign(teacher, english, school.AddClass("40"));
+        var own = school.Assign(teacher, english, school.AddClass("43"), lessonsPerWeek: 2);
+
+        school.SetLessonsPerWeek(english, 8);
+
+        Assert.Equal(8, usual.LessonsPerWeek);
+        Assert.Equal(2, own.LessonsPerWeek);
+    }
+
+    [Fact]
+    public void LessonsPerWeekOf_Class_AddsUpItsPlan()
+    {
+        var school = NewSchool();
+        var group = school.AddClass("44");
+        school.Assign(school.AddTeacher("A"), school.AddSubject("Ingliz tili", 10), group);
+        school.Assign(school.AddTeacher("B"), school.AddSubject("Matematika", 2), group);
+
+        Assert.Equal(12, school.LessonsPerWeekOf(group));
+        Assert.Equal(2, school.AssignmentsOf(group).Count());
+    }
+
+    [Fact]
+    public void ChangeWeek_ChangesDaysAndSlots_AndEmptiesTimetables()
+    {
+        var school = NewSchool();
+        var group = school.AddClass("5-A");
+        school.TimetableFor(group).Set(0, 0, new Lesson("Tarix", "Rahimov"));
+
+        school.ChangeWeek(new WeekLayout(WeekLayout.AllDayNames.Take(5).ToArray(), 8));
+
+        Assert.Equal(5, school.Layout.DayCount);
+        Assert.Equal(8, school.Layout.SlotsPerDay);
+        Assert.Equal(40, school.MaxLessonsPerWeek);
+        Assert.Null(school.TimetableFor(group).Get(0, 0));
+        Assert.Equal(8, school.TimetableFor(group).Layout.SlotsPerDay);
+    }
+
+    [Fact]
+    public void HasAnyLessons_IsTrueOnlyWhenSomethingIsScheduled()
+    {
+        var school = NewSchool();
+        var group = school.AddClass("5-A");
+        Assert.False(school.HasAnyLessons());
+        school.TimetableFor(group); // an empty timetable does not count
+        Assert.False(school.HasAnyLessons());
+
+        school.TimetableFor(group).Set(3, 2, new Lesson("Tarix", "Rahimov"));
+
+        Assert.True(school.HasAnyLessons());
+    }
+
+    [Fact]
+    public void ChangeWeek_KeepsDaysOffByDayName()
+    {
+        var school = NewSchool(); // Monday..Saturday
+        var teacher = school.AddTeacher("Karimov");
+        school.SetDayOff(teacher, 1, true); // Seshanba
+        school.SetDayOff(teacher, 5, true); // Shanba
+
+        // Drop Monday and Saturday: Seshanba becomes day 0, Shanba is gone.
+        school.ChangeWeek(new WeekLayout(new[] { "Seshanba", "Chorshanba", "Payshanba", "Juma" }, 7));
+
+        Assert.Equal(new[] { 0 }, teacher.DaysOff);
+    }
+
+    [Fact]
+    public void ChangeWeek_RefusesAWeekTooShortForAClass()
+    {
+        var school = NewSchool();
+        var assignment = school.Assign(school.AddTeacher("A"), school.AddSubject("Ingliz tili", 20), school.AddClass("40"));
+
+        Assert.Throws<SchoolRuleException>(() =>
+            school.ChangeWeek(new WeekLayout(WeekLayout.AllDayNames.Take(3).ToArray(), 6))); // 18 slots
+
+        Assert.Equal(6, school.Layout.DayCount);
+        Assert.Equal(20, assignment.LessonsPerWeek);
     }
 
     [Fact]

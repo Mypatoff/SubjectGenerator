@@ -12,7 +12,7 @@ namespace SubjectGenerator.Core;
 /// </summary>
 public static class SchoolStorage
 {
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
@@ -25,13 +25,17 @@ public static class SchoolStorage
         var file = new SchoolFile
         {
             Version = CurrentVersion,
+            Week = new WeekEntry { Days = school.Layout.DayNames.ToList(), LessonsPerDay = school.Layout.SlotsPerDay },
             Classes = school.Classes.Select(c => c.Name).ToList(),
             Subjects = school.Subjects.Select(s => new SubjectEntry { Name = s.Name, LessonsPerWeek = s.LessonsPerWeek }).ToList(),
             Teachers = school.Teachers
                 .Select(t => new TeacherEntry { Name = t.Name, DaysOff = t.DaysOff.OrderBy(d => d).ToList() })
                 .ToList(),
             Assignments = school.Assignments
-                .Select(a => new AssignmentEntry { Teacher = a.Teacher.Name, Subject = a.Subject.Name, Class = a.Class.Name })
+                .Select(a => new AssignmentEntry
+                {
+                    Teacher = a.Teacher.Name, Subject = a.Subject.Name, Class = a.Class.Name, LessonsPerWeek = a.LessonsPerWeek
+                })
                 .ToList(),
             Lessons = LessonsOf(school).ToList()
         };
@@ -45,12 +49,11 @@ public static class SchoolStorage
         File.Move(tempPath, path, overwrite: true);
     }
 
-    /// <summary>Reads the school from the file. A missing file means a new, empty school.</summary>
-    public static School Load(string path, WeekLayout layout)
+    /// <summary>Reads the school from the file. A missing file means a new, empty school with the default week.</summary>
+    public static School Load(string path)
     {
-        var school = new School(layout);
         if (!File.Exists(path))
-            return school;
+            return new School(WeekLayout.Default);
 
         var json = JsonNode.Parse(File.ReadAllText(path)) as JsonObject
                    ?? throw new InvalidDataException("The school file is empty.");
@@ -61,8 +64,12 @@ public static class SchoolStorage
                 $"The school file was made by a newer version of the app (format {version}).");
         if (version == 1)
             MigrateV1ToV2(json);
+        if (version <= 2)
+            MigrateV2ToV3(json);
 
         var file = json.Deserialize<SchoolFile>()!;
+        var layout = new WeekLayout(file.Week.Days, file.Week.LessonsPerDay);
+        var school = new School(layout);
 
         foreach (var name in file.Classes)
             school.AddClass(name);
@@ -80,7 +87,8 @@ public static class SchoolStorage
             school.Assign(
                 school.Teachers.First(t => t.Name == entry.Teacher),
                 school.Subjects.First(s => s.Name == entry.Subject),
-                school.Classes.First(c => c.Name == entry.Class));
+                school.Classes.First(c => c.Name == entry.Class),
+                entry.LessonsPerWeek);
         }
         foreach (var entry in file.Lessons)
         {
@@ -109,6 +117,27 @@ public static class SchoolStorage
         json["Version"] = 2;
     }
 
+    /// <summary>
+    /// Version 3 adds "Week" (school days and lessons a day; before, the week was always Monday-Saturday
+    /// with 7 lessons) and a "LessonsPerWeek" on every assignment (before, every class got the subject's number).
+    /// </summary>
+    private static void MigrateV2ToV3(JsonObject json)
+    {
+        var oldWeekDays = new JsonArray();
+        foreach (var day in WeekLayout.AllDayNames.Take(6))
+            oldWeekDays.Add(day);
+        json["Week"] = new JsonObject { ["Days"] = oldWeekDays, ["LessonsPerDay"] = 7 };
+
+        var subjectLessons = new Dictionary<string, int>();
+        foreach (var subject in json["Subjects"] as JsonArray ?? new JsonArray())
+            subjectLessons[subject!["Name"]!.GetValue<string>()] = subject["LessonsPerWeek"]!.GetValue<int>();
+
+        foreach (var assignment in json["Assignments"] as JsonArray ?? new JsonArray())
+            assignment!["LessonsPerWeek"] = subjectLessons[assignment["Subject"]!.GetValue<string>()];
+
+        json["Version"] = 3;
+    }
+
     private static IEnumerable<LessonEntry> LessonsOf(School school)
     {
         foreach (var schoolClass in school.Classes)
@@ -130,11 +159,18 @@ public static class SchoolStorage
     private sealed class SchoolFile
     {
         public int Version { get; set; }
+        public WeekEntry Week { get; set; } = new();
         public List<string> Classes { get; set; } = new();
         public List<SubjectEntry> Subjects { get; set; } = new();
         public List<TeacherEntry> Teachers { get; set; } = new();
         public List<AssignmentEntry> Assignments { get; set; } = new();
         public List<LessonEntry> Lessons { get; set; } = new();
+    }
+
+    private sealed class WeekEntry
+    {
+        public List<string> Days { get; set; } = new();
+        public int LessonsPerDay { get; set; }
     }
 
     private sealed class SubjectEntry
@@ -154,6 +190,7 @@ public static class SchoolStorage
         public string Teacher { get; set; } = "";
         public string Subject { get; set; } = "";
         public string Class { get; set; } = "";
+        public int LessonsPerWeek { get; set; }
     }
 
     private sealed class LessonEntry

@@ -79,20 +79,18 @@ public static class TimetableGenerator
         return new GenerationResult(search.ToPlacements(best), search.TotalLessons - best.Count, problems);
     }
 
+    /// <summary>
+    /// A class's subjects are exactly the ones it has a teacher for (not every class has every subject),
+    /// so the only thing to warn about here is a school where nothing has been set up yet.
+    /// </summary>
     private static void ReportMissingTeachers(School school, List<string> problems)
     {
         if (school.Assignments.Count == 0)
-        {
             problems.Add("Hech bir sinfga o'qituvchi biriktirilmagan. Sozlamalar > O'qituvchilar bo'limida belgilang.");
-            return;
-        }
 
-        foreach (var subject in school.Subjects)
-        {
-            var classesWithoutTeacher = school.Classes.Where(c => school.TeacherOf(subject, c) is null).ToList();
-            if (classesWithoutTeacher.Count > 0)
-                problems.Add($"{subject.Name} fanining o'qituvchisi yo'q: {string.Join(", ", classesWithoutTeacher.Select(c => c.Name))}.");
-        }
+        var emptyClasses = school.Classes.Where(c => !school.AssignmentsOf(c).Any()).ToList();
+        if (school.Assignments.Count > 0 && emptyClasses.Count > 0)
+            problems.Add($"Bu sinflarga hech qanday fan biriktirilmagan: {string.Join(", ", emptyClasses.Select(c => c.Name))}.");
     }
 
     private static void ReportOverloads(School school, List<string> problems)
@@ -101,15 +99,15 @@ public static class TimetableGenerator
 
         foreach (var schoolClass in school.Classes)
         {
-            var lessons = school.Assignments.Where(a => a.Class == schoolClass).Sum(a => a.Subject.LessonsPerWeek);
-            var slots = layout.DayCount * layout.SlotsPerDay;
+            var lessons = school.LessonsPerWeekOf(schoolClass);
+            var slots = layout.SlotCount;
             if (lessons > slots)
                 problems.Add($"{schoolClass.Name}: haftasiga {lessons} ta dars, lekin haftada faqat {slots} ta soat bor.");
         }
 
         foreach (var teacher in school.Teachers)
         {
-            var lessons = school.AssignmentsOf(teacher).Sum(a => a.Subject.LessonsPerWeek);
+            var lessons = school.LessonsPerWeekOf(teacher);
             var slots = (layout.DayCount - teacher.DaysOff.Count) * layout.SlotsPerDay;
             if (lessons > slots)
                 problems.Add($"{teacher.Name}: haftasiga {lessons} ta dars, lekin ish kunlarida faqat {slots} ta soat bor.");
@@ -141,6 +139,9 @@ public static class TimetableGenerator
         private bool _compact;
         private readonly bool[,,] _allowed;     // [class, day, slot]: may this slot be used at all?
         private readonly int[] _maxPerDay;      // [group]: most lessons of the group in one day
+        private readonly int[] _extraSlot;      // [class]: the "one more lesson" slot (see SetUpMode), or Empty
+        private readonly int[] _extraDays;      // [class]: on how many days that slot may be used
+        private readonly int[] _extraUsed;      // [class]: on how many days it is used now
 
         // State: who is where.
         private readonly int[,,] _classSlot;    // [class, day, slot] -> group, or Empty
@@ -162,7 +163,7 @@ public static class TimetableGenerator
             _groups = school.Assignments.ToArray();
             _groupClass = _groups.Select(a => IndexOf(school.Classes, a.Class)).ToArray();
             _groupTeacher = _groups.Select(a => IndexOf(school.Teachers, a.Teacher)).ToArray();
-            _groupSize = _groups.Select(a => a.Subject.LessonsPerWeek).ToArray();
+            _groupSize = _groups.Select(a => a.LessonsPerWeek).ToArray();
             TotalLessons = _groupSize.Sum();
 
             _teacherOff = new bool[school.Teachers.Count, _days];
@@ -172,6 +173,9 @@ public static class TimetableGenerator
 
             _allowed = new bool[_classes, _days, _slots];
             _maxPerDay = new int[_groups.Length];
+            _extraSlot = new int[_classes];
+            _extraDays = new int[_classes];
+            _extraUsed = new int[_classes];
             _classSlot = new int[_classes, _days, _slots];
             _teacherSlot = new int[school.Teachers.Count, _days, _slots];
             _placedAtStep = new int[_classes, _days, _slots];
@@ -225,15 +229,19 @@ public static class TimetableGenerator
             .ToList();
 
         /// <summary>
-        /// Compact mode: each class gets a fixed number of lessons per day (spread evenly, the extra ones
-        /// on the first days), always starting at the 1st slot, so there are no gaps. A subject is also
-        /// limited per day (5 lessons a week over 6 days = at most 1 a day).
+        /// Compact mode: lessons are spread evenly and every day starts at the 1st slot with no gaps.
+        /// A class with 40 lessons over 6 days gets 6 lessons every day (slots 1-6) plus a 7th lesson
+        /// on 4 of the days; the search decides which 4 (the "extra slot", used on at most 4 days).
+        /// When every lesson is placed this can only add up with no gaps. A subject is also limited
+        /// per day (5 lessons a week over 6 days = at most 1 a day).
         /// Relaxed mode: any slot, no per-day limit (the score still prefers spreading out and no gaps).
         /// </summary>
         private void SetUpMode(bool compact)
         {
             _compact = compact;
             Array.Clear(_allowed);
+            Array.Fill(_extraSlot, Empty);
+            Array.Clear(_extraDays);
 
             for (var c = 0; c < _classes; c++)
             {
@@ -242,12 +250,18 @@ public static class TimetableGenerator
                     if (_groupClass[g] == c)
                         lessons += _groupSize[g];
 
-                for (var d = 0; d < _days; d++)
+                var everyDay = lessons / _days;
+                var extraDays = lessons % _days;
+                var usableSlots = !compact || everyDay >= _slots ? _slots : everyDay + (extraDays > 0 ? 1 : 0);
+                if (compact && everyDay < _slots && extraDays > 0)
                 {
-                    var today = compact ? lessons / _days + (d < lessons % _days ? 1 : 0) : _slots;
-                    for (var k = 0; k < Math.Min(today, _slots); k++)
-                        _allowed[c, d, k] = true;
+                    _extraSlot[c] = everyDay;
+                    _extraDays[c] = extraDays;
                 }
+
+                for (var d = 0; d < _days; d++)
+                    for (var k = 0; k < usableSlots; k++)
+                        _allowed[c, d, k] = true;
             }
 
             for (var g = 0; g < _groups.Length; g++)
@@ -265,9 +279,18 @@ public static class TimetableGenerator
             Fill(_classSlot, Empty);
             Fill(_teacherSlot, Empty);
             Array.Clear(_groupPerDay);
+            Array.Clear(_extraUsed);
             Array.Copy(_groupSize, _waiting, _groupSize.Length);
             _placedCount = 0;
         }
+
+        /// <summary>
+        /// May a lesson of class c go into this slot? It must be allowed in this mode, and the class's
+        /// "extra slot" may only be used on as many days as planned (a slot already taken can be swapped).
+        /// </summary>
+        private bool SlotUsable(int c, int d, int k) =>
+            _allowed[c, d, k]
+            && (k != _extraSlot[c] || _extraUsed[c] < _extraDays[c] || _classSlot[c, d, k] != Empty);
 
         /// <summary>The waiting group with the fewest free spots right now (ties broken at random).</summary>
         private int MostConstrainedWaitingGroup()
@@ -312,7 +335,7 @@ public static class TimetableGenerator
                     continue;
                 for (var k = 0; k < _slots; k++)
                 {
-                    if (!_allowed[c, d, k])
+                    if (!SlotUsable(c, d, k))
                         continue;
 
                     var cost = Score(g, d, k) + _random.NextDouble();
@@ -328,6 +351,16 @@ public static class TimetableGenerator
                         bestSlot = k;
                     }
                 }
+            }
+
+            if (bestDay == -1)
+            {
+                // Only "extra slot" days were left and they are all used up: free one of them so the
+                // extra lesson can move to another day next time.
+                var d = Enumerable.Range(0, _days).Where(d => _classSlot[c, d, _extraSlot[c]] != Empty)
+                                  .OrderBy(_ => _random.Next()).First();
+                Remove(_classSlot[c, d, _extraSlot[c]], d, _extraSlot[c]);
+                return;
             }
 
             var inClass = _classSlot[c, bestDay, bestSlot];
@@ -369,7 +402,7 @@ public static class TimetableGenerator
         {
             var c = _groupClass[g];
             var t = _groupTeacher[g];
-            return _allowed[c, day, slot]
+            return SlotUsable(c, day, slot)
                    && _classSlot[c, day, slot] == Empty
                    && _teacherSlot[t, day, slot] == Empty
                    && !_teacherOff[t, day]
@@ -398,7 +431,7 @@ public static class TimetableGenerator
             var c = _groupClass[g];
             for (var d = 0; d < _days; d++)
                 for (var k = 0; k < _slots; k++)
-                    if (_allowed[c, d, k] && _classSlot[c, d, k] == Empty)
+                    if (SlotUsable(c, d, k) && _classSlot[c, d, k] == Empty)
                         return false;
             return true;
         }
@@ -432,6 +465,8 @@ public static class TimetableGenerator
             _classSlot[c, d, k] = g;
             _teacherSlot[_groupTeacher[g], d, k] = g;
             _placedAtStep[c, d, k] = _step;
+            if (k == _extraSlot[c])
+                _extraUsed[c]++;
             _groupPerDay[g, d]++;
             _waiting[g]--;
             _placedCount++;
@@ -439,7 +474,10 @@ public static class TimetableGenerator
 
         private void Remove(int g, int d, int k)
         {
-            _classSlot[_groupClass[g], d, k] = Empty;
+            var c = _groupClass[g];
+            if (k == _extraSlot[c])
+                _extraUsed[c]--;
+            _classSlot[c, d, k] = Empty;
             _teacherSlot[_groupTeacher[g], d, k] = Empty;
             _groupPerDay[g, d]--;
             _waiting[g]++;

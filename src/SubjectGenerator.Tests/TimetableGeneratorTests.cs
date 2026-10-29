@@ -12,7 +12,7 @@ public class TimetableGeneratorTests
     /// </summary>
     private static School RealisticSchool()
     {
-        var school = new School(WeekLayout.Default);
+        var school = new School(TestWeek.SixBySeven);
         for (var grade = 1; grade <= 10; grade++)
         {
             school.AddClass($"{grade}-A");
@@ -51,7 +51,7 @@ public class TimetableGeneratorTests
         Assert.Empty(result.Problems);
         Assert.Equal(20 * 33, result.Placements.Count);
         foreach (var a in school.Assignments)
-            Assert.Equal(a.Subject.LessonsPerWeek, result.Placements.Count(p => p.Class == a.Class && p.Subject == a.Subject));
+            Assert.Equal(a.LessonsPerWeek, result.Placements.Count(p => p.Class == a.Class && p.Subject == a.Subject));
     }
 
     [Fact]
@@ -120,7 +120,7 @@ public class TimetableGeneratorTests
     {
         // One teacher, 6 classes x 7 lessons = 42 = every slot of the week. Only one way to fit:
         // the teacher is busy every slot, and no two classes share one.
-        var school = new School(WeekLayout.Default);
+        var school = new School(TestWeek.SixBySeven);
         var math = school.AddSubject("Matematika", 7);
         var teacher = school.AddTeacher("Karimov");
         for (var i = 1; i <= 6; i++)
@@ -136,7 +136,7 @@ public class TimetableGeneratorTests
     public void OverloadedTeacher_IsReported()
     {
         // 8 lessons a day are needed on 6 days, but a teacher with 2 days off has only 4 x 7 = 28 slots.
-        var school = new School(WeekLayout.Default);
+        var school = new School(TestWeek.SixBySeven);
         var math = school.AddSubject("Matematika", 6);
         var teacher = school.AddTeacher("Karimov");
         school.SetDayOff(teacher, 0, true);
@@ -155,7 +155,7 @@ public class TimetableGeneratorTests
     public void OverloadedClass_DoesNotStopOtherClassesFromBeingPlaced()
     {
         // 5-A needs 45 lessons in a 42-slot week. That must not keep 5-B (and its shared teacher) from being placed.
-        var school = new School(WeekLayout.Default);
+        var school = new School(TestWeek.SixBySeven);
         var a = school.AddClass("5-A");
         var b = school.AddClass("5-B");
         var english = school.AddSubject("Ingliz tili", 30);
@@ -178,26 +178,76 @@ public class TimetableGeneratorTests
     }
 
     [Fact]
-    public void SubjectWithoutTeacher_IsReportedAndSkipped()
+    public void SubjectOnlySomeClassesHave_IsNotAProblem()
     {
-        var school = new School(WeekLayout.Default);
+        // Like a college: Fizika is only in 5-A's plan. 5-B simply does not have it.
+        var school = new School(TestWeek.SixBySeven);
         var a = school.AddClass("5-A");
         var b = school.AddClass("5-B");
         var math = school.AddSubject("Matematika", 5);
-        school.AddSubject("Fizika", 2);
+        var physics = school.AddSubject("Fizika", 2);
         school.Assign(school.AddTeacher("Karimov"), math, a);
-        school.Assign(school.AddTeacher("Aliyev"), math, b);
+        school.Assign(school.AddTeacher("Rahimov"), math, b);
+        school.Assign(school.AddTeacher("Aliyev"), physics, a);
 
         var result = TimetableGenerator.Generate(school, seed: 9);
 
-        Assert.Equal(10, result.Placements.Count);
-        Assert.Contains(result.Problems, p => p.Contains("Fizika") && p.Contains("5-A") && p.Contains("5-B"));
+        Assert.Equal(12, result.Placements.Count);
+        Assert.Empty(result.Problems);
+    }
+
+    [Fact]
+    public void ClassWithNoSubjects_IsReported()
+    {
+        var school = new School(TestWeek.SixBySeven);
+        var a = school.AddClass("5-A");
+        school.AddClass("5-B");
+        school.Assign(school.AddTeacher("Karimov"), school.AddSubject("Matematika", 5), a);
+
+        var result = TimetableGenerator.Generate(school, seed: 9);
+
+        Assert.Contains(result.Problems, p => p.Contains("5-B"));
+    }
+
+    [Fact]
+    public void EachClass_GetsItsOwnNumberOfLessons()
+    {
+        var school = new School(TestWeek.SixBySeven);
+        var a = school.AddClass("40");
+        var b = school.AddClass("43");
+        var english = school.AddSubject("Ingliz tili", 10);
+        var qashiboev = school.AddTeacher("Qashiboev");
+        school.Assign(qashiboev, english, a);
+        school.Assign(qashiboev, english, b, lessonsPerWeek: 2);
+
+        var result = TimetableGenerator.Generate(school, seed: 13);
+
+        Assert.Equal(10, result.Placements.Count(p => p.Class == a));
+        Assert.Equal(2, result.Placements.Count(p => p.Class == b));
+    }
+
+    [Fact]
+    public void LongerDays_FitMoreLessons()
+    {
+        // 47 lessons do not fit in 6 x 7 = 42, but do in 6 x 8 = 48.
+        var eightADay = new WeekLayout(WeekLayout.AllDayNames.Take(6).ToArray(), 8);
+        var school = new School(eightADay);
+        var group = school.AddClass("44");
+        school.Assign(school.AddTeacher("Qashiboev"), school.AddSubject("Ingliz tili", 10), group);
+        school.Assign(school.AddTeacher("Muxtorov"), school.AddSubject("Qishloq xo'jaligi mashinalari", 37), group);
+
+        var result = TimetableGenerator.Generate(school, seed: 14);
+
+        Assert.Equal(0, result.UnplacedLessons);
+        Assert.Equal(47, result.Placements.Count);
+        // 47 over 6 days: some days have 8 lessons, others fewer; never more than 8.
+        Assert.All(result.Placements, p => Assert.InRange(p.Slot, 0, 7));
     }
 
     [Fact]
     public void NothingAssigned_IsReported()
     {
-        var school = new School(WeekLayout.Default);
+        var school = new School(TestWeek.SixBySeven);
         school.AddClass("5-A");
 
         var result = TimetableGenerator.Generate(school, seed: 10);

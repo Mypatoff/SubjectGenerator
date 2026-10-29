@@ -84,35 +84,64 @@
 
             <!-- ===== Classes ===== -->
             <TabItem Header="  Sinflar  ">
-                <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}" Margin="0,0,0,8"
-                               Text="Maktabdagi sinflar. Masalan: 5-A, 5-B, 6-A."/>
-                    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
-                        <Button DockPanel.Dock="Right" Style="{StaticResource ActionButton}" Margin="8,0,0,0"
-                                Content="Qo'shish" Click="OnAddClass"/>
-                        <TextBox x:Name="NewClassName" Style="{StaticResource InputBox}" KeyDown="OnAddClassKey"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="260"/>
+                        <ColumnDefinition Width="16"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Left: the list of classes. -->
+                    <DockPanel Grid.Column="0">
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}" Margin="0,0,0,8"
+                                   Text="Sinflar yoki guruhlar. Masalan: 5-A, 40."/>
+                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                            <Button DockPanel.Dock="Right" Style="{StaticResource ActionButton}" Margin="8,0,0,0"
+                                    Content="Qo'shish" Click="OnAddClass"/>
+                            <TextBox x:Name="NewClassName" Style="{StaticResource InputBox}" KeyDown="OnAddClassKey"/>
+                        </DockPanel>
+                        <Border Style="{StaticResource Panel}">
+                            <ListBox x:Name="ClassesList" BorderThickness="0" SelectionChanged="OnClassSelected">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Style="{StaticResource RowButton}" Content="✕"
+                                                    ToolTip="O'chirish" Tag="{Binding}" Click="OnRemoveClass"/>
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        </DockPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Border>
                     </DockPanel>
-                    <Border Style="{StaticResource Panel}">
-                        <ListBox x:Name="ClassesList" BorderThickness="0">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <DockPanel>
-                                        <Button DockPanel.Dock="Right" Style="{StaticResource RowButton}" Content="✕"
-                                                ToolTip="O'chirish" Tag="{Binding}" Click="OnRemoveClass"/>
-                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                    </DockPanel>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+
+                    <!-- Right: the selected class's weekly plan. -->
+                    <Border Grid.Column="2" Style="{StaticResource Panel}" Padding="14">
+                        <Grid>
+                            <TextBlock x:Name="NoClassSelected" Style="{StaticResource Hint}"
+                                       VerticalAlignment="Center" HorizontalAlignment="Center" TextAlignment="Center"
+                                       Text="Haftalik rejasini ko'rish uchun chapdan sinfni tanlang."/>
+
+                            <DockPanel x:Name="ClassDetails" Visibility="Collapsed">
+                                <TextBlock x:Name="ClassPlanTitle" DockPanel.Dock="Top" FontSize="18" FontWeight="Bold"
+                                           Foreground="#25364D"/>
+                                <TextBlock x:Name="ClassPlanTotal" DockPanel.Dock="Top" FontWeight="SemiBold" Margin="0,4,0,4"/>
+                                <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}" Margin="0,0,0,10"
+                                           Text="Har bir fan shu sinfda haftasiga necha marta o'tilishini o'zgartirish mumkin. Fan va o'qituvchi &quot;O'qituvchilar&quot; bo'limida biriktiriladi."/>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <StackPanel x:Name="ClassPlanRows"/>
+                                </ScrollViewer>
+                            </DockPanel>
+                        </Grid>
                     </Border>
-                </DockPanel>
+                </Grid>
             </TabItem>
 
             <!-- ===== Subjects ===== -->
             <TabItem Header="  Fanlar  ">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}" Margin="0,0,0,8"
-                               Text="Fanlar va har bir sinfda haftasiga necha marta o'tilishi."/>
+                               Text="Fanlar va odatda haftasiga necha marta o'tilishi. Sinfga fan biriktirilganda shu son olinadi; har bir sinf uchun alohida o'zgartirish mumkin (Sinflar bo'limida)."/>
                     <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
                         <Button DockPanel.Dock="Right" Style="{StaticResource ActionButton}" Margin="8,0,0,0"
                                 Content="Qo'shish" Click="OnAddSubject"/>
@@ -212,7 +241,7 @@
                                            Margin="0,0,0,6"/>
                                 <WrapPanel x:Name="ClassCheckboxes" DockPanel.Dock="Top" Margin="0,0,0,14"/>
 
-                                <TextBlock DockPanel.Dock="Top" Text="Hozir o'qitadi:" FontWeight="SemiBold"
+                                <TextBlock x:Name="TeacherLoadTitle" DockPanel.Dock="Top" FontWeight="SemiBold"
                                            Foreground="#25364D" Margin="0,0,0,6"/>
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                                     <StackPanel x:Name="TeacherSummary"/>
@@ -221,6 +250,32 @@
                         </Grid>
                     </Border>
                 </Grid>
+            </TabItem>
+
+            <!-- ===== The week: school days and lessons a day ===== -->
+            <TabItem Header="  Hafta  ">
+                <Border Style="{StaticResource Panel}" Padding="16" VerticalAlignment="Top">
+                    <StackPanel>
+                        <TextBlock Text="O'qish kunlari:" FontWeight="SemiBold" Foreground="#25364D"/>
+                        <WrapPanel x:Name="WeekDayCheckboxes" Margin="0,8,0,16"/>
+
+                        <TextBlock Text="Kuniga darslar soni:" FontWeight="SemiBold" Foreground="#25364D"/>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,2,0,8"
+                                   Text="Kunning eng ko'p dars soni. Sinflarning darslari kunlarga teng bo'linadi, shuning uchun ba'zi kunlar qisqaroq bo'lishi mumkin (masalan, 8 o'rniga 6 ta)."/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource RowButton}" Content="−" Click="OnFewerLessonsPerDay"/>
+                            <TextBlock x:Name="LessonsPerDayText" Width="40" TextAlignment="Center" FontSize="16"
+                                       FontWeight="Bold" VerticalAlignment="Center"/>
+                            <Button Style="{StaticResource RowButton}" Content="+" Click="OnMoreLessonsPerDay"/>
+                        </StackPanel>
+
+                        <TextBlock x:Name="WeekTotalText" Foreground="#5B6B82" Margin="0,16,0,4"/>
+                        <TextBlock x:Name="WeekWarning" Foreground="#B54708" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                        <Button HorizontalAlignment="Left" Style="{StaticResource ActionButton}"
+                                Content="Haftani saqlash" Click="OnSaveWeek"/>
+                    </StackPanel>
+                </Border>
             </TabItem>
         </TabControl>
     </DockPanel>
