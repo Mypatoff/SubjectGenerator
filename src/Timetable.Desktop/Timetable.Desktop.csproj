@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>Timetable.Desktop</RootNamespace>
+    <AssemblyName>Timetable</AssemblyName>
+    <Product>Timetable</Product>
+    <AssemblyTitle>Timetable</AssemblyTitle>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Timetable.Core\Timetable.Core.csproj" />
+  </ItemGroup>
+
+</Project>

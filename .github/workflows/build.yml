@@ -21,37 +21,37 @@ jobs:
           dotnet-version: "8.0.x"
 
       - name: Restore
-        run: dotnet restore SubjectGenerator.sln
+        run: dotnet restore Timetable.sln
 
       # Also compiles the WPF project, which can only be built on Windows.
       - name: Build
-        run: dotnet build SubjectGenerator.sln -c Release --no-restore
+        run: dotnet build Timetable.sln -c Release --no-restore
 
       - name: Run tests
-        run: dotnet test src/SubjectGenerator.Tests/SubjectGenerator.Tests.csproj -c Release --no-build
+        run: dotnet test src/Timetable.Tests/Timetable.Tests.csproj -c Release --no-build
 
-      # One self-contained SubjectGenerator.exe: runs on a PC without .NET installed.
+      # One self-contained Timetable.exe: runs on a PC without .NET installed.
       # The version is stamped into the app: its Update button compares it with the release name below.
       - name: Publish the app
-        run: dotnet publish src/SubjectGenerator.Desktop/SubjectGenerator.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:Version=1.0.${{ github.run_number }} -o publish/desktop
+        run: dotnet publish src/Timetable.Desktop/Timetable.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:Version=1.0.${{ github.run_number }} -o publish/desktop
 
       - name: Install Inno Setup
         run: choco install innosetup --version=6.7.1 -y --no-progress
 
-      - name: Build the installer (SubjectGenerator-Setup.exe)
-        run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=1.0.${{ github.run_number }}" installer\SubjectGenerator.iss'
+      - name: Build the installer (Timetable-Setup.exe)
+        run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=1.0.${{ github.run_number }}" installer\Timetable.iss'
 
       - name: Upload installer
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: SubjectGenerator-Setup
-          path: dist/SubjectGenerator-Setup.exe
+          name: Timetable-Setup
+          path: dist/Timetable-Setup.exe
 
       - name: Upload app
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: SubjectGenerator
-          path: publish/desktop/SubjectGenerator.exe
+          name: Timetable
+          path: publish/desktop/Timetable.exe
 
       # The release action does not move an existing tag, so without this the "latest" tag (and the source
       # shown on the release page) could stay on an old commit.
@@ -71,5 +71,5 @@ jobs:
           body: Automatically built from the latest commit on main (${{ github.sha }}). Not a stability guarantee - just the newest build.
           prerelease: true
           files: |
-            dist/SubjectGenerator-Setup.exe
-            publish/desktop/SubjectGenerator.exe
+            dist/Timetable-Setup.exe
+            publish/desktop/Timetable.exe
