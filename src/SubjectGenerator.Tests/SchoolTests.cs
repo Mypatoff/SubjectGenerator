@@ -80,6 +80,32 @@ public class SchoolTests
     }
 
     [Fact]
+    public void SetDayOff_TurnsOnAndOff()
+    {
+        var school = NewSchool();
+        var teacher = school.AddTeacher("Karimov");
+
+        school.SetDayOff(teacher, 2, true);
+        Assert.True(teacher.IsDayOff(2));
+        Assert.False(teacher.IsDayOff(3));
+
+        school.SetDayOff(teacher, 2, false);
+        Assert.Empty(teacher.DaysOff);
+    }
+
+    [Fact]
+    public void SetDayOff_TeacherMustWorkAtLeastOneDay()
+    {
+        var school = NewSchool();
+        var teacher = school.AddTeacher("Karimov");
+        for (var day = 0; day < 5; day++)
+            school.SetDayOff(teacher, day, true);
+
+        Assert.Throws<SchoolRuleException>(() => school.SetDayOff(teacher, 5, true));
+        Assert.Throws<ArgumentOutOfRangeException>(() => school.SetDayOff(teacher, 6, true));
+    }
+
+    [Fact]
     public void Teacher_CanTeachManyClassesAndSubjects()
     {
         var school = NewSchool();

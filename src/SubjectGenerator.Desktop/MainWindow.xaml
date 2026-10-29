@@ -32,6 +32,30 @@
             </Setter>
         </Style>
 
+        <!-- The main action: blue button. -->
+        <Style x:Key="AccentButton" TargetType="Button">
+            <Setter Property="Background" Value="#2F5FD0"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Box" Background="{TemplateBinding Background}" CornerRadius="6" Padding="14,8">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Box" Property="Background" Value="#244CAB"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Box" Property="Opacity" Value="0.6"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- One row in the class list: a check mark in front of the class that is open now. -->
         <Style x:Key="ClassRow" TargetType="ListBoxItem">
             <Setter Property="Cursor" Value="Hand"/>
@@ -59,11 +83,16 @@
         </Style>
     </Window.Resources>
 
-    <DockPanel Margin="16">
-        <!-- Top bar: class picker on the left, settings on the right. -->
+    <DockPanel x:Name="Root" Margin="16">
+        <!-- Top bar: class picker on the left, generate and settings on the right. -->
         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
             <Button DockPanel.Dock="Right" Style="{StaticResource ToolbarButton}" Click="OnSettingsClick">
                 <TextBlock Text="⚙  Sozlamalar" FontWeight="SemiBold"/>
+            </Button>
+            <Button x:Name="GenerateButton" DockPanel.Dock="Right" Style="{StaticResource AccentButton}"
+                    Margin="0,0,8,0" Click="OnGenerateClick"
+                    ToolTip="Hamma sinflar uchun haftalik jadvalni bir vaqtda tuzadi">
+                <TextBlock x:Name="GenerateButtonText" Text="⚡  Jadval tuzish" FontWeight="SemiBold"/>
             </Button>
 
             <StackPanel Orientation="Horizontal">
@@ -112,6 +141,9 @@
 
         <TextBlock x:Name="ClassTitle" DockPanel.Dock="Top" FontSize="22" FontWeight="Bold"
                    Foreground="#25364D" Margin="0,0,0,10"/>
+
+        <TextBlock x:Name="EmptyTimetableHint" DockPanel.Dock="Top" Foreground="#5B6B82" Margin="0,-4,0,10"
+                   Text="Jadval hali tuzilmagan. &quot;Jadval tuzish&quot; tugmasini bosing." Visibility="Collapsed"/>
 
         <Grid>
             <Border x:Name="WeekGridBox" Background="White" BorderBrush="#C9D1DC" BorderThickness="1" CornerRadius="6">

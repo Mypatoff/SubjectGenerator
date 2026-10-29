@@ -188,7 +188,18 @@
                             <DockPanel x:Name="TeacherDetails" Visibility="Collapsed">
                                 <TextBlock x:Name="TeacherTitle" DockPanel.Dock="Top" FontSize="18" FontWeight="Bold"
                                            Foreground="#25364D"/>
-                                <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}" Margin="0,4,0,12"
+
+                                <TextBlock DockPanel.Dock="Top" Text="Dam olish kunlari:" FontWeight="SemiBold"
+                                           Foreground="#25364D" Margin="0,12,0,2"/>
+                                <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}" Margin="0,0,0,6"
+                                           Text="Belgilangan kunlarda bu o'qituvchiga dars qo'yilmaydi."/>
+                                <WrapPanel x:Name="DayOffCheckboxes" DockPanel.Dock="Top" Margin="0,0,0,8"/>
+
+                                <Border DockPanel.Dock="Top" BorderBrush="#E3E8EF" BorderThickness="0,1,0,0" Margin="0,4,0,10"/>
+
+                                <TextBlock DockPanel.Dock="Top" Text="Qaysi fanni qaysi sinflarda o'qitadi:" FontWeight="SemiBold"
+                                           Foreground="#25364D"/>
+                                <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}" Margin="0,2,0,8"
                                            Text="Fanni tanlang, keyin shu o'qituvchi uni qaysi sinflarda o'qitishini belgilang."/>
 
                                 <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">

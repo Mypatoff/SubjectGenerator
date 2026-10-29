@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -62,17 +63,103 @@ public partial class MainWindow : Window
         {
             ClassPickerText.Text = "-";
             ClassTitle.Text = "";
+            EmptyTimetableHint.Visibility = Visibility.Collapsed;
             return;
         }
 
         ClassPickerText.Text = _selectedClass.Name;
         ShowTimetable(_school.TimetableFor(_selectedClass));
+        EmptyTimetableHint.Visibility = HasAnyLessons() ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void OnSettingsClick(object sender, RoutedEventArgs e)
     {
         new SettingsWindow(_school) { Owner = this }.ShowDialog();
         Refresh();
+    }
+
+    // ----- Generating timetables -----
+
+    private async void OnGenerateClick(object sender, RoutedEventArgs e)
+    {
+        if (_school.Classes.Count == 0)
+        {
+            MessageBox.Show(this, "Avval Sozlamalarda sinflar, fanlar va o'qituvchilarni qo'shing.",
+                "Jadval tuzish", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        if (HasAnyLessons() && MessageBox.Show(this,
+                "Hozirgi jadval o'chirilib, hamma sinflar uchun yangi jadval tuziladi. Davom etilsinmi?",
+                "Jadval tuzish", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            return;
+
+        // The search can take a few seconds, so it runs in the background and the window stays responsive.
+        Root.IsEnabled = false;
+        GenerateButtonText.Text = "⏳  Tuzilmoqda...";
+        GenerationResult result;
+        try
+        {
+            result = await Task.Run(() => TimetableGenerator.Generate(_school));
+        }
+        finally
+        {
+            Root.IsEnabled = true;
+            GenerateButtonText.Text = "⚡  Jadval tuzish";
+        }
+
+        result.ApplyTo(_school);
+        SaveSchool();
+        Refresh();
+        ShowGenerationReport(result);
+    }
+
+    private bool HasAnyLessons()
+    {
+        foreach (var schoolClass in _school.Classes)
+        {
+            var timetable = _school.TimetableFor(schoolClass);
+            for (var day = 0; day < _school.Layout.DayCount; day++)
+                for (var slot = 0; slot < _school.Layout.SlotsPerDay; slot++)
+                    if (timetable.Get(day, slot) is not null)
+                        return true;
+        }
+        return false;
+    }
+
+    private void ShowGenerationReport(GenerationResult result)
+    {
+        if (result.Problems.Count == 0)
+        {
+            MessageBox.Show(this, $"Jadval tuzildi: {result.Placements.Count} ta dars joylashtirildi.",
+                "Jadval tuzish", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        // Long lists are cut so the message box still fits on the screen.
+        const int maxLines = 15;
+        var lines = result.Problems.Take(maxLines).Select(p => "• " + p).ToList();
+        if (result.Problems.Count > maxLines)
+            lines.Add($"... va yana {result.Problems.Count - maxLines} ta.");
+
+        var header = result.UnplacedLessons == 0
+            ? $"Jadval tuzildi ({result.Placements.Count} ta dars), lekin e'tibor bering:"
+            : $"Jadval to'liq tuzilmadi: {result.UnplacedLessons} ta dars joylashmadi.";
+        MessageBox.Show(this, header + "\n\n" + string.Join("\n", lines),
+            "Jadval tuzish", MessageBoxButton.OK, MessageBoxImage.Warning);
+    }
+
+    private void SaveSchool()
+    {
+        try
+        {
+            SchoolStorage.Save(_school, SchoolStorage.DefaultPath);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Ma'lumotlarni saqlab bo'lmadi:\n{ex.Message}", "SubjectGenerator",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     // ----- Class picker (the drop-down list with a search box) -----

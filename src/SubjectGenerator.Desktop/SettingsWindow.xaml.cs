@@ -219,6 +219,11 @@ public partial class SettingsWindow : Window
             return;
 
         TeacherTitle.Text = teacher.Name;
+
+        DayOffCheckboxes.Children.Clear();
+        for (var day = 0; day < _school.Layout.DayCount; day++)
+            DayOffCheckboxes.Children.Add(CreateDayOffCheckBox(teacher, day));
+
         ClassCheckboxes.Children.Clear();
 
         var subject = SelectedTeacherSubject;
@@ -234,6 +239,24 @@ public partial class SettingsWindow : Window
         }
 
         RefreshTeacherSummary(teacher);
+    }
+
+    /// <summary>Ticked = the teacher does not work that day.</summary>
+    private CheckBox CreateDayOffCheckBox(Teacher teacher, int day)
+    {
+        var box = new CheckBox
+        {
+            Content = _school.Layout.DayNames[day],
+            IsChecked = teacher.IsDayOff(day),
+            Margin = new Thickness(0, 0, 18, 8),
+            Cursor = Cursors.Hand
+        };
+        box.Click += (_, _) =>
+        {
+            if (!TryChange(() => _school.SetDayOff(teacher, day, box.IsChecked == true)))
+                box.IsChecked = teacher.IsDayOff(day); // the change was refused: show the real state again
+        };
+        return box;
     }
 
     /// <summary>

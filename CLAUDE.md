@@ -34,7 +34,9 @@ compiles the WPF app there too. Linux box: `dotnet test src/SubjectGenerator.Tes
 - [x] Main screen: searchable class drop-down on top, week grid for the selected class, Settings button
 - [x] Settings window: classes, subjects (lessons per week), teachers, which teacher teaches which
       subject in which classes (one teacher per subject per class; a teacher can have many)
-- [x] Saving data: JSON at %AppData%\SubjectGenerator\school.json (`SchoolStorage`, format version 1,
-      saved after every change). Timetables are not saved yet.
-- [ ] Timetable generation
+- [x] Saving data: JSON at %AppData%\SubjectGenerator\school.json (`SchoolStorage`, format version 2
+      with a v1->v2 migration, saved after every change). Includes teachers' days off and timetables.
+- [x] Teacher days off (Settings > O'qituvchilar)
+- [x] Timetable generation ("Jadval tuzish" button, `TimetableGenerator`): all classes at once; never a
+      teacher in two classes at once or on a day off; tries for no gaps and subjects spread over the week
 - [ ] Manual editing of slots

@@ -49,6 +49,46 @@ public sealed class SchoolStorageTests : IDisposable
     }
 
     [Fact]
+    public void SaveThenLoad_KeepsDaysOffAndTimetables()
+    {
+        var school = new School(WeekLayout.Default);
+        var a = school.AddClass("5-A");
+        var karimov = school.AddTeacher("Karimov");
+        school.SetDayOff(karimov, 0, true);
+        school.SetDayOff(karimov, 5, true);
+        school.TimetableFor(a).Set(2, 3, new Lesson("Matematika", "Karimov"));
+
+        SchoolStorage.Save(school, FilePath);
+        var loaded = SchoolStorage.Load(FilePath, WeekLayout.Default);
+
+        Assert.Equal(new[] { 0, 5 }, loaded.Teachers[0].DaysOff.OrderBy(d => d));
+        Assert.Equal(new Lesson("Matematika", "Karimov"), loaded.TimetableFor(loaded.Classes[0]).Get(2, 3));
+        Assert.Null(loaded.TimetableFor(loaded.Classes[0]).Get(2, 4));
+    }
+
+    [Fact]
+    public void Load_Version1File_IsMigrated()
+    {
+        // A file saved by the first version of the app: teachers were plain names, no timetables.
+        Directory.CreateDirectory(_folder);
+        File.WriteAllText(FilePath, """
+            {
+              "Version": 1,
+              "Classes": ["5-A"],
+              "Subjects": [{ "Name": "Matematika", "LessonsPerWeek": 5 }],
+              "Teachers": ["Karimov", "Aliyev"],
+              "Assignments": [{ "Teacher": "Karimov", "Subject": "Matematika", "Class": "5-A" }]
+            }
+            """);
+
+        var school = SchoolStorage.Load(FilePath, WeekLayout.Default);
+
+        Assert.Equal(new[] { "Karimov", "Aliyev" }, school.Teachers.Select(t => t.Name));
+        Assert.All(school.Teachers, t => Assert.Empty(t.DaysOff));
+        Assert.Equal("Karimov", school.TeacherOf(school.Subjects[0], school.Classes[0])?.Name);
+    }
+
+    [Fact]
     public void Save_Twice_OverwritesTheFile()
     {
         var school = new School(WeekLayout.Default);

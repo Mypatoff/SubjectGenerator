@@ -93,6 +93,17 @@ public sealed class School
         return teacher;
     }
 
+    /// <summary>Marks a day (0-based) as the teacher's day off, or as a working day again.</summary>
+    public void SetDayOff(Teacher teacher, int day, bool isOff)
+    {
+        if (day < 0 || day >= Layout.DayCount)
+            throw new ArgumentOutOfRangeException(nameof(day));
+        if (isOff && teacher.DaysOff.Count == Layout.DayCount - 1 && !teacher.IsDayOff(day))
+            throw new SchoolRuleException($"{teacher.Name} haftada kamida bir kun ishlashi kerak.");
+
+        teacher.SetDayOff(day, isOff);
+    }
+
     /// <summary>Removes the teacher and everything they were teaching.</summary>
     public void RemoveTeacher(Teacher teacher)
     {
@@ -147,6 +158,9 @@ public sealed class School
         }
         return timetable;
     }
+
+    /// <summary>Empties every class's timetable.</summary>
+    public void ClearTimetables() => _timetables.Clear();
 
     // ----- Helpers -----
 
