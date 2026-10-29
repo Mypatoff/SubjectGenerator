@@ -1,5 +1,7 @@
 using System;
+using System.Diagnostics;
 using System.IO;
+using System.Net.Http;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
@@ -54,6 +56,69 @@ public partial class MainWindow : Window
     {
         new SettingsWindow(_school) { Owner = this }.ShowDialog();
         Refresh();
+    }
+
+    // ----- Updating the program from GitHub -----
+
+    private async void OnUpdateClick(object sender, RoutedEventArgs e)
+    {
+        const string title = "Yangilash";
+        UpdateButton.IsEnabled = false;
+        UpdateButtonText.Text = "⏳  Tekshirilmoqda...";
+        try
+        {
+            var update = await AppUpdater.GetLatestAsync();
+            var current = AppUpdater.CurrentVersion;
+            if (!UpdateChecker.IsNewer(update.Version, current))
+            {
+                MessageBox.Show(this, $"Sizda eng yangi versiya o'rnatilgan ({current}).", title,
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            // The single-file download cannot update itself: send the user to the download page instead.
+            if (!AppUpdater.IsInstalled)
+            {
+                MessageBox.Show(this,
+                    $"Yangi versiya bor: {update.Version} (sizda {current}).\n\n" +
+                    "Bu dastur o'rnatilmagan (alohida fayl), shuning uchun avtomatik yangilanmaydi. " +
+                    "Yuklab olish sahifasi ochiladi.",
+                    title, MessageBoxButton.OK, MessageBoxImage.Information);
+                Process.Start(new ProcessStartInfo(update.PageUrl) { UseShellExecute = true });
+                return;
+            }
+
+            if (MessageBox.Show(this,
+                    $"Yangi versiya bor: {update.Version} (sizda {current}).\n\n" +
+                    "Yuklab olinib o'rnatilsinmi? Dastur yopilib, yangilangach qayta ochiladi. " +
+                    "Jadvallaringiz saqlanib qoladi.",
+                    title, MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                return;
+
+            var installer = await AppUpdater.DownloadInstallerAsync(update,
+                percent => UpdateButtonText.Text = $"⏳  Yuklanmoqda... {percent}%");
+
+            if (!AppUpdater.StartInstaller(installer))
+            {
+                MessageBox.Show(this, "Yangilash bekor qilindi (ruxsat berilmadi).", title,
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            // The school is saved after every change, so closing right away loses nothing.
+            Application.Current.Shutdown();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException or InvalidDataException)
+        {
+            MessageBox.Show(this,
+                "Yangilab bo'lmadi. Internetga ulanganingizni tekshiring va qayta urinib ko'ring.\n\n" + ex.Message,
+                title, MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally
+        {
+            UpdateButton.IsEnabled = true;
+            UpdateButtonText.Text = "⬆  Yangilash";
+        }
     }
 
     // ----- Generating timetables -----

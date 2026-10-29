@@ -8,6 +8,7 @@ Status: working app. Classes, subjects, teachers and who teaches what are entere
 ## Download
 Every push to `main` builds on GitHub: see the **latest** release for `SubjectGenerator-Setup.exe`
 (installer) and `SubjectGenerator.exe` (single file, no install).
+An installed app updates itself with the **Yangilash** button on the main screen.
 
 ## Develop
 `dotnet test src/SubjectGenerator.Tests` runs the Core tests anywhere. The WPF app (`src/SubjectGenerator.Desktop`)

@@ -53,3 +53,9 @@ compiles the WPF app there too. Linux box: `dotnet test src/SubjectGenerator.Tes
 - [x] Timetable generation ("Jadval tuzish" button, `TimetableGenerator`): all classes at once; never a
       teacher in two classes at once or on a day off; tries for no gaps and subjects spread over the week
 - [ ] Manual editing of slots
+- [x] Update button (main screen, "Yangilash"): reads the "latest" release from the GitHub API, compares its
+      version (release name "Latest build 1.0.N") with the version stamped into the app, downloads
+      SubjectGenerator-Setup.exe and runs it silently (Windows asks permission only for an all-users install); the installer reopens the app.
+      Parsing/comparing is `UpdateChecker` in Core (tested); download/launch is `AppUpdater` in Desktop.
+      The single-file SubjectGenerator.exe (no unins000.exe next to it) only opens the release page.
+      The installer is not code-signed yet: consider signing before selling.

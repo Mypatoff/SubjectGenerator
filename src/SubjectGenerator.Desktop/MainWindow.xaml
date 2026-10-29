@@ -89,6 +89,11 @@
             <Button DockPanel.Dock="Right" Style="{StaticResource ToolbarButton}" Click="OnSettingsClick">
                 <TextBlock Text="⚙  Sozlamalar" FontWeight="SemiBold"/>
             </Button>
+            <Button x:Name="UpdateButton" DockPanel.Dock="Right" Style="{StaticResource ToolbarButton}"
+                    Margin="0,0,8,0" Click="OnUpdateClick"
+                    ToolTip="GitHub'dagi eng yangi versiyani tekshiradi va o'rnatadi">
+                <TextBlock x:Name="UpdateButtonText" Text="⬆  Yangilash" FontWeight="SemiBold"/>
+            </Button>
             <Button x:Name="GenerateButton" DockPanel.Dock="Right" Style="{StaticResource AccentButton}"
                     Margin="0,0,8,0" Click="OnGenerateClick"
                     ToolTip="Hamma sinflar uchun haftalik jadvalni bir vaqtda tuzadi">

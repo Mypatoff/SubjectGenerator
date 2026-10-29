@@ -50,5 +50,7 @@ Name: "{group}\{#AppName}"; Filename: "{app}\SubjectGenerator.exe"
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\SubjectGenerator.exe"; Tasks: desktopicon
 
+; Also runs after a silent install: the in-app Update button relies on this to reopen the app.
+; runasoriginaluser keeps the app from running as administrator if the installer was elevated (it would look at another user's AppData).
 [Run]
-Filename: "{app}\SubjectGenerator.exe"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\SubjectGenerator.exe"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall runasoriginaluser
