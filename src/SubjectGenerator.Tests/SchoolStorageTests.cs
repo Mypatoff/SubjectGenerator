@@ -56,6 +56,7 @@ public sealed class SchoolStorageTests : IDisposable
         var karimov = school.AddTeacher("Karimov");
         school.SetDayOff(karimov, 0, true);
         school.SetDayOff(karimov, 5, true);
+        school.Assign(karimov, school.AddSubject("Matematika", 5), a);
         school.TimetableFor(a).Set(2, 3, new Lesson("Matematika", "Karimov"));
 
         SchoolStorage.Save(school, FilePath);
@@ -128,7 +129,7 @@ public sealed class SchoolStorageTests : IDisposable
                 { "Teacher": "Karimov", "Subject": "Matematika", "Class": "5-A" },
                 { "Teacher": "Karimov", "Subject": "Matematika", "Class": "5-B" }
               ],
-              "Lessons": [{ "Class": "5-A", "Day": 5, "Slot": 6, "Subject": "Matematika", "Teacher": "Karimov" }]
+              "Lessons": [{ "Class": "5-A", "Day": 4, "Slot": 6, "Subject": "Matematika", "Teacher": "Karimov" }]
             }
             """);
 
@@ -138,7 +139,7 @@ public sealed class SchoolStorageTests : IDisposable
         Assert.Equal(7, school.Layout.SlotsPerDay);
         Assert.All(school.Assignments, a => Assert.Equal(5, a.LessonsPerWeek));
         Assert.True(school.Teachers[0].IsDayOff(5));
-        Assert.Equal("Matematika", school.TimetableFor(school.Classes[0]).Get(5, 6)?.Subject);
+        Assert.Equal("Matematika", school.TimetableFor(school.Classes[0]).Get(4, 6)?.Subject);
     }
 
     [Fact]
@@ -326,5 +327,154 @@ public sealed class SchoolStorageTests : IDisposable
         SchoolStorage.Load(FilePath); // current format now: no new copy
 
         Assert.Equal(oldFile, File.ReadAllText(FilePath + ".v2.bak"));
+    }
+
+    [Fact]
+    public void Save_KeepsADailyCopyOfTheFileBeforeTheFirstSaveOfTheDay()
+    {
+        SchoolStorage.Save(SchoolWith("5-A"), FilePath);
+        SchoolStorage.Save(SchoolWith("5-A", "5-B"), FilePath);
+        SchoolStorage.Save(SchoolWith("5-A", "5-B", "5-C"), FilePath);
+        SchoolStorage.Save(SchoolWith("1"), FilePath); // .bak now holds 3 classes, but the daily copy still has 1
+
+        var snapshot = Assert.Single(Directory.GetFiles(_folder, "school.json.daily-*.bak"));
+        Assert.Equal("5-A", Assert.Single(SchoolStorage.Load(snapshot).Classes).Name);
+    }
+
+    [Fact]
+    public void Save_KeepsOnlyTheNewestDailyCopies()
+    {
+        SchoolStorage.Save(SchoolWith("5-A"), FilePath);
+        for (var day = 1; day <= 20; day++)
+            File.WriteAllText($"{FilePath}.daily-202001{day:00}.bak", "{}");
+
+        SchoolStorage.Save(SchoolWith("5-B"), FilePath);
+
+        var kept = Directory.GetFiles(_folder, "school.json.daily-*.bak");
+        Assert.Equal(14, kept.Length);
+        Assert.DoesNotContain(kept, f => f.EndsWith("20200101.bak"));
+        Assert.Contains(kept, f => f.EndsWith("20200120.bak"));
+    }
+
+    [Fact]
+    public void LoadWithRecovery_BackupDamaged_UsesADailyCopy()
+    {
+        SchoolStorage.Save(SchoolWith("5-A"), FilePath);
+        SchoolStorage.Save(SchoolWith("5-A", "5-B"), FilePath); // daily copy: 5-A
+        File.WriteAllText(FilePath + ".bak", "garbage");
+        File.WriteAllText(FilePath, "garbage");
+
+        var result = SchoolStorage.LoadWithRecovery(FilePath);
+
+        Assert.Equal(SchoolStorage.LoadOutcome.RestoredFromBackup, result.Outcome);
+        Assert.Equal("5-A", Assert.Single(result.School.Classes).Name);
+    }
+
+    [Fact]
+    public void LoadWithRecovery_DamagedFile_BackupFromNewerVersion_Throws_AndLeavesTheFileWhereItIs()
+    {
+        Directory.CreateDirectory(_folder);
+        File.WriteAllText(FilePath, "garbage");
+        File.WriteAllText(FilePath + ".bak", "{\"Version\": 999}");
+
+        Assert.Throws<SchoolFileTooNewException>(() => SchoolStorage.LoadWithRecovery(FilePath));
+
+        Assert.Equal("garbage", File.ReadAllText(FilePath));
+        Assert.Empty(Directory.GetFiles(_folder, "*.broken-*"));
+    }
+
+    [Fact]
+    public void LoadWithRecovery_TwoBreaksInTheSameSecond_DoNotCollide()
+    {
+        Directory.CreateDirectory(_folder);
+        for (var i = 0; i < 2; i++)
+        {
+            File.WriteAllText(FilePath, "garbage " + i);
+            SchoolStorage.LoadWithRecovery(FilePath);
+        }
+
+        Assert.Equal(2, Directory.GetFiles(_folder, "*.broken-*").Length);
+    }
+
+    private const string LessonFileStart = """
+        {
+          "Version": 3,
+          "Week": { "Days": ["Dushanba", "Seshanba"], "LessonsPerDay": 3 },
+          "Classes": ["5-A", "5-B"],
+          "Subjects": [{ "Name": "Matematika", "LessonsPerWeek": 2 }],
+          "Teachers": [{ "Name": "Karimov", "DaysOff": [1] }],
+          "Assignments": [
+            { "Teacher": "Karimov", "Subject": "Matematika", "Class": "5-A", "LessonsPerWeek": 2 },
+            { "Teacher": "Karimov", "Subject": "Matematika", "Class": "5-B", "LessonsPerWeek": 2 }
+          ],
+        """;
+
+    [Fact]
+    public void Load_LessonsThatContradictThePlan_AreDropped_AndReported()
+    {
+        Directory.CreateDirectory(_folder);
+        File.WriteAllText(FilePath, LessonFileStart + """
+              "Lessons": [
+                { "Class": "5-A", "Day": 0, "Slot": 0, "Subject": "Matematika", "Teacher": "Karimov" },
+                { "Class": "5-B", "Day": 0, "Slot": 0, "Subject": "Matematika", "Teacher": "Karimov" },
+                { "Class": "5-A", "Day": 1, "Slot": 0, "Subject": "Matematika", "Teacher": "Karimov" },
+                { "Class": "5-A", "Day": 0, "Slot": 0, "Subject": "Matematika", "Teacher": "Karimov" },
+                { "Class": "5-A", "Day": 0, "Slot": 1, "Subject": "Fizika", "Teacher": "Karimov" },
+                { "Class": "5-A", "Day": 0, "Slot": 5, "Subject": "Matematika", "Teacher": "Karimov" },
+                { "Class": "5-A", "Day": 0, "Slot": 1, "Subject": "Matematika", "Teacher": "Karimov" },
+                { "Class": "5-A", "Day": 0, "Slot": 2, "Subject": "Matematika", "Teacher": "Karimov" }
+              ]
+            }
+            """);
+
+        var (school, warnings) = SchoolStorage.LoadDetailed(FilePath);
+
+        // Kept: 5-A day 0 slots 0 and 1. Dropped: teacher already busy in 5-B, day off, the same slot twice,
+        // no such assignment, slot outside the week, and a third lesson of a 2-lesson plan.
+        var timetable = school.TimetableFor(school.Classes[0]);
+        Assert.NotNull(timetable.Get(0, 0));
+        Assert.NotNull(timetable.Get(0, 1));
+        Assert.Null(timetable.Get(0, 2));
+        Assert.Equal(2, school.LessonCount());
+        Assert.Contains(warnings, w => w.StartsWith("6 ta dars"));
+    }
+
+    [Fact]
+    public void Load_SkippedAssignment_IsReported()
+    {
+        Directory.CreateDirectory(_folder);
+        File.WriteAllText(FilePath, LessonFileStart.Replace("\"Class\": \"5-B\"", "\"Class\": \"9-Z\"") + "\"Lessons\": [] }");
+
+        var (school, warnings) = SchoolStorage.LoadDetailed(FilePath);
+
+        Assert.Single(school.Assignments);
+        Assert.Contains(warnings, w => w.Contains("9-Z"));
+    }
+
+    [Fact]
+    public void Load_CleanFile_HasNoWarnings()
+    {
+        SchoolStorage.Save(SchoolWith("5-A"), FilePath);
+
+        Assert.Empty(SchoolStorage.LoadDetailed(FilePath).Warnings);
+    }
+
+    [Fact]
+    public void Names_AreComparedTheSameWayOnEveryPc()
+    {
+        // Under a Turkish/Azeri culture "i".ToUpper() is "İ"; the school must not depend on that.
+        var school = new School(TestWeek.SixBySeven);
+        school.AddClass("5-i");
+
+        var old = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("tr-TR");
+            Assert.Throws<SchoolRuleException>(() => school.AddClass("5-I"));
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = old;
+        }
     }
 }

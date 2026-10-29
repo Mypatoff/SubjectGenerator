@@ -8,11 +8,12 @@ public sealed record Placement(SchoolClass Class, int Day, int Slot, Subject Sub
 /// <summary>What <see cref="TimetableGenerator.Generate"/> made, plus anything the user should know.</summary>
 public sealed class GenerationResult
 {
-    internal GenerationResult(IReadOnlyList<Placement> placements, int unplacedLessons, IReadOnlyList<string> problems)
+    internal GenerationResult(IReadOnlyList<Placement> placements, int unplacedLessons, IReadOnlyList<string> problems, int seed)
     {
         Placements = placements;
         UnplacedLessons = unplacedLessons;
         Problems = problems;
+        Seed = seed;
     }
 
     public IReadOnlyList<Placement> Placements { get; }
@@ -22,6 +23,9 @@ public sealed class GenerationResult
 
     /// <summary>Messages for the user (in Uzbek): missing teachers, overloaded teachers, lessons that did not fit...</summary>
     public IReadOnlyList<string> Problems { get; }
+
+    /// <summary>Number the search started from: <c>Generate(school, seed)</c> with it repeats the search (same timetable unless the 4-second time limit cut it short); useful for bug reports.</summary>
+    public int Seed { get; }
 
     /// <summary>Replaces every class's timetable with the generated one.</summary>
     public void ApplyTo(School school)
@@ -54,7 +58,8 @@ public static class TimetableGenerator
     public static GenerationResult Generate(School school, int? seed = null)
     {
         var problems = new List<string>();
-        var random = seed is null ? new Random() : new Random(seed.Value);
+        var usedSeed = seed ?? Random.Shared.Next(1, 1_000_000);
+        var random = new Random(usedSeed);
         var search = new Search(school, random);
 
         ReportMissingTeachers(school, problems);
@@ -76,7 +81,7 @@ public static class TimetableGenerator
         if (best.Count < search.TotalLessons)
             problems.AddRange(search.DescribeUnplaced(best));
 
-        return new GenerationResult(search.ToPlacements(best), search.TotalLessons - best.Count, problems);
+        return new GenerationResult(search.ToPlacements(best), search.TotalLessons - best.Count, problems, usedSeed);
     }
 
     /// <summary>

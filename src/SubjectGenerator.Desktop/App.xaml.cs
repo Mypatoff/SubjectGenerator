@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
@@ -75,6 +76,13 @@ public partial class App : Application
                         $"Eski fayl shu yerda saqlab qo'yildi:\n{result.BrokenFilePath}",
                         "SubjectGenerator", MessageBoxButton.OK, MessageBoxImage.Warning);
                     break;
+            }
+            if (result.Warnings is { Count: > 0 })
+            {
+                var lines = result.Warnings.Take(10).Select(w => "• " + w);
+                MessageBox.Show(
+                    "Ma'lumotlar faylida noto'g'ri joylar topildi va olib tashlandi:\n\n" + string.Join("\n", lines),
+                    "SubjectGenerator", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
             return result.School;
         }

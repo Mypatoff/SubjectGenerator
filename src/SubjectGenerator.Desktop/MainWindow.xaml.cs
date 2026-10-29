@@ -105,7 +105,7 @@ public partial class MainWindow : Window
     {
         if (result.Problems.Count == 0)
         {
-            MessageBox.Show(this, $"Jadval tuzildi: {result.Placements.Count} ta dars joylashtirildi.",
+            MessageBox.Show(this, $"Jadval tuzildi: {result.Placements.Count} ta dars joylashtirildi.\n\n(variant: {result.Seed})",
                 "Jadval tuzish", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
@@ -119,7 +119,7 @@ public partial class MainWindow : Window
         var header = result.UnplacedLessons == 0
             ? $"Jadval tuzildi ({result.Placements.Count} ta dars), lekin e'tibor bering:"
             : $"Jadval to'liq tuzilmadi: {result.UnplacedLessons} ta dars joylashmadi.";
-        MessageBox.Show(this, header + "\n\n" + string.Join("\n", lines),
+        MessageBox.Show(this, header + "\n\n" + string.Join("\n", lines) + $"\n\n(variant: {result.Seed})",
             "Jadval tuzish", MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 

@@ -288,9 +288,9 @@ public sealed class School
         return name.Trim();
     }
 
-    /// <summary>"5-a" and "5-A" count as the same name.</summary>
+    /// <summary>"5-a" and "5-A" count as the same name. Ordinal, so a file means the same on every PC (no Turkish-i surprises).</summary>
     private static bool SameName(string a, string b) =>
-        string.Equals(a, b, StringComparison.CurrentCultureIgnoreCase);
+        string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
     private static int IndexOf(IReadOnlyList<string> list, string item)
     {

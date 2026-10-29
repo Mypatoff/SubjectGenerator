@@ -60,22 +60,66 @@ public static class SchoolStorage
         }
 
         if (File.Exists(path))
+        {
+            TakeDailySnapshot(path);
             File.Replace(tempPath, path, BackupPath(path));
+        }
         else
             File.Move(tempPath, path);
     }
 
     private static string BackupPath(string path) => path + ".bak";
 
+    /// <summary>How many daily copies (school.json.daily-yyyyMMdd.bak) are kept.</summary>
+    private const int DailySnapshotsKept = 14;
+
+    /// <summary>
+    /// school.json.bak only holds the save before this one, so a mistake that was saved (a deleted class...)
+    /// is gone from it after the next save. Once a day, before the first save, the current file is
+    /// copied as well; the newest <see cref="DailySnapshotsKept"/> copies are kept.
+    /// A snapshot that cannot be made never stops the save.
+    /// </summary>
+    private static void TakeDailySnapshot(string path)
+    {
+        try
+        {
+            var snapshot = $"{path}.daily-{DateTime.Now:yyyyMMdd}.bak";
+            if (!File.Exists(snapshot) && new FileInfo(path).Length > 0)
+                File.Copy(path, snapshot);
+
+            foreach (var old in DailySnapshots(path).Skip(DailySnapshotsKept))
+                File.Delete(old);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Not worth stopping the save for.
+        }
+    }
+
+    /// <summary>The daily copies of the file, newest first.</summary>
+    private static IEnumerable<string> DailySnapshots(string path)
+    {
+        var folder = Path.GetDirectoryName(Path.GetFullPath(path))!;
+        return Directory.GetFiles(folder, Path.GetFileName(path) + ".daily-*.bak")
+            .OrderByDescending(f => f, StringComparer.Ordinal);
+    }
+
     /// <summary>
     /// Reads the school from the file. A missing file means a new, empty school with the default week.
     /// Throws <see cref="InvalidDataException"/> if the file is damaged; a file that cannot be opened
     /// throws an <see cref="IOException"/> or <see cref="UnauthorizedAccessException"/> instead.
     /// </summary>
-    public static School Load(string path)
+    public static School Load(string path) => LoadDetailed(path).School;
+
+    /// <summary>
+    /// <see cref="Load"/>, plus a list of things that were left out because they did not make sense
+    /// (an assignment pointing at a missing teacher, a lesson that contradicts the plan...), in Uzbek,
+    /// for the user.
+    /// </summary>
+    public static (School School, IReadOnlyList<string> Warnings) LoadDetailed(string path)
     {
         if (!File.Exists(path))
-            return new School(WeekLayout.Default);
+            return (new School(WeekLayout.Default), Array.Empty<string>());
 
         var text = File.ReadAllText(path);
         try
@@ -103,7 +147,9 @@ public static class SchoolStorage
     }
 
     /// <param name="BrokenFilePath">Where the damaged file was put aside, if it was damaged.</param>
-    public sealed record LoadResult(School School, LoadOutcome Outcome, string? BrokenFilePath);
+    /// <param name="Warnings">Things in the file that were left out (see <see cref="LoadDetailed"/>).</param>
+    public sealed record LoadResult(School School, LoadOutcome Outcome, string? BrokenFilePath,
+        IReadOnlyList<string>? Warnings = null);
 
     /// <summary>
     /// <see cref="Load"/>, but a damaged file is put aside (never deleted) and the backup of the previous
@@ -114,32 +160,44 @@ public static class SchoolStorage
     {
         try
         {
-            return new LoadResult(Load(path), LoadOutcome.Loaded, null);
+            var (school, warnings) = LoadDetailed(path);
+            return new LoadResult(school, LoadOutcome.Loaded, null, warnings);
         }
         catch (InvalidDataException)
         {
-            var brokenPath = path + $".broken-{DateTime.Now:yyyyMMdd-HHmmss}";
-            File.Move(path, brokenPath);
-
-            var backupPath = BackupPath(path);
-            if (File.Exists(backupPath))
+            // Find a usable copy BEFORE touching the damaged file: if a copy turns out to be from a newer app
+            // (SchoolFileTooNewException) or cannot be read, that exception leaves everything where it is.
+            (School School, IReadOnlyList<string> Warnings)? restored = null;
+            foreach (var candidate in new[] { BackupPath(path) }.Concat(DailySnapshots(path)))
             {
+                if (!File.Exists(candidate))
+                    continue;
                 try
                 {
-                    var restored = Load(backupPath);
-                    Save(restored, path); // without this the next start would find no file and begin empty
-                    return new LoadResult(restored, LoadOutcome.RestoredFromBackup, brokenPath);
+                    restored = LoadDetailed(candidate);
+                    break;
                 }
                 catch (InvalidDataException)
                 {
-                    // The backup is no good either.
+                    // This copy is no good either; try the next one.
                 }
+            }
+
+            var brokenPath = path + $".broken-{DateTime.Now:yyyyMMdd-HHmmss}";
+            for (var n = 2; File.Exists(brokenPath); n++)
+                brokenPath = path + $".broken-{DateTime.Now:yyyyMMdd-HHmmss}-{n}";
+            File.Move(path, brokenPath);
+
+            if (restored is { } found)
+            {
+                Save(found.School, path); // without this the next start would find no file and begin empty
+                return new LoadResult(found.School, LoadOutcome.RestoredFromBackup, brokenPath, found.Warnings);
             }
             return new LoadResult(new School(WeekLayout.Default), LoadOutcome.StartedEmpty, brokenPath);
         }
     }
 
-    private static School Read(string text, string path)
+    private static (School School, IReadOnlyList<string> Warnings) Read(string text, string path)
     {
         var json = JsonNode.Parse(text) as JsonObject
                    ?? throw new InvalidDataException("The school file is empty.");
@@ -169,13 +227,19 @@ public static class SchoolStorage
             foreach (var day in entry.DaysOff.Where(d => d >= 0 && d < layout.DayCount))
                 school.SetDayOff(teacher, day, true);
         }
+        var warnings = new List<string>();
+
         foreach (var entry in file.Assignments)
         {
             var teacher = school.Teachers.FirstOrDefault(t => t.Name == entry.Teacher);
             var subject = school.Subjects.FirstOrDefault(s => s.Name == entry.Subject);
             var schoolClass = school.Classes.FirstOrDefault(c => c.Name == entry.Class);
             if (teacher is null || subject is null || schoolClass is null)
-                continue; // points at something that is not there: skip it instead of losing the whole school
+            {
+                // Points at something that is not there: skip it instead of losing the whole school.
+                warnings.Add($"Biriktirish o'tkazib yuborildi (yo'q o'qituvchi, fan yoki sinf): {entry.Class} - {entry.Subject} - {entry.Teacher}.");
+                continue;
+            }
 
             try
             {
@@ -184,16 +248,41 @@ public static class SchoolStorage
             catch (SchoolRuleException)
             {
                 // A second teacher for the same subject and class, or a bad number of lessons: skip it too.
+                warnings.Add($"Biriktirish o'tkazib yuborildi (qoidaga zid): {entry.Class} - {entry.Subject} - {entry.Teacher}.");
             }
         }
+
+        // A timetable is only worth keeping if it follows the plan. A hand-edited or half-written file can hold
+        // lessons that do not: drop those instead of showing a timetable that contradicts itself.
+        var dropped = 0;
+        var teacherBusy = new HashSet<(string Teacher, int Day, int Slot)>();
+        var placedOfAssignment = new Dictionary<TeachingAssignment, int>();
         foreach (var entry in file.Lessons)
         {
             var schoolClass = school.Classes.FirstOrDefault(c => c.Name == entry.Class);
             var fits = entry.Day >= 0 && entry.Day < layout.DayCount && entry.Slot >= 0 && entry.Slot < layout.SlotsPerDay;
-            if (schoolClass is not null && fits)
-                school.TimetableFor(schoolClass).Set(entry.Day, entry.Slot, new Lesson(entry.Subject, entry.Teacher));
+            var assignment = schoolClass is null ? null : school.AssignmentsOf(schoolClass)
+                .FirstOrDefault(a => a.Subject.Name == entry.Subject && a.Teacher.Name == entry.Teacher);
+
+            var valid = schoolClass is not null && fits && assignment is not null
+                        && !assignment.Teacher.IsDayOff(entry.Day)
+                        && school.TimetableFor(schoolClass).Get(entry.Day, entry.Slot) is null
+                        && !teacherBusy.Contains((entry.Teacher, entry.Day, entry.Slot))
+                        && placedOfAssignment.GetValueOrDefault(assignment) < assignment.LessonsPerWeek;
+            if (!valid)
+            {
+                dropped++;
+                continue;
+            }
+
+            teacherBusy.Add((entry.Teacher, entry.Day, entry.Slot));
+            placedOfAssignment[assignment!] = placedOfAssignment.GetValueOrDefault(assignment!) + 1;
+            school.TimetableFor(schoolClass!).Set(entry.Day, entry.Slot, new Lesson(entry.Subject, entry.Teacher));
         }
-        return school;
+        if (dropped > 0)
+            warnings.Add($"{dropped} ta dars jadvaldan olib tashlandi: ular reja bilan mos kelmadi.");
+
+        return (school, warnings);
     }
 
     /// <summary>
