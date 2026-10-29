@@ -26,6 +26,7 @@ OutputDir=..\dist
 OutputBaseFilename=Timetable-Setup
 UninstallDisplayName={#AppName}
 UninstallDisplayIcon={app}\Timetable.exe
+SetupIconFile=..\src\Timetable.Desktop\Assets\Timetable.ico
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern

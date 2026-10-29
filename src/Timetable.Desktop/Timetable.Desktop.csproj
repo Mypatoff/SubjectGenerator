@@ -10,7 +10,12 @@
     <Product>Timetable</Product>
     <AssemblyTitle>Timetable</AssemblyTitle>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <ApplicationIcon>Assets\Timetable.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\Timetable.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Timetable.Core\Timetable.Core.csproj" />
