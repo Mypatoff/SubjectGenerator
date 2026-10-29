@@ -13,10 +13,10 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up .NET 8
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           dotnet-version: "8.0.x"
 
@@ -35,27 +35,35 @@ jobs:
         run: dotnet publish src/SubjectGenerator.Desktop/SubjectGenerator.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/desktop
 
       - name: Install Inno Setup
-        run: choco install innosetup -y --no-progress
+        run: choco install innosetup --version=6.7.1 -y --no-progress
 
       - name: Build the installer (SubjectGenerator-Setup.exe)
         run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=1.0.${{ github.run_number }}" installer\SubjectGenerator.iss'
 
       - name: Upload installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: SubjectGenerator-Setup
           path: dist/SubjectGenerator-Setup.exe
 
       - name: Upload app
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: SubjectGenerator
           path: publish/desktop/SubjectGenerator.exe
 
+      # The release action does not move an existing tag, so without this the "latest" tag (and the source
+      # shown on the release page) could stay on an old commit.
+      - name: Point the "latest" tag at this commit
+        if: github.event_name == 'push'
+        run: |
+          git tag -f latest ${{ github.sha }}
+          git push --force origin refs/tags/latest
+
       # Keeps one rolling "latest" release with the newest .exe files attached.
       - name: Publish "latest" release
         if: github.event_name == 'push'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: latest
           name: Latest build

@@ -363,4 +363,153 @@ public class SchoolTests
         Assert.Throws<ArgumentException>(() => new WeekLayout(Array.Empty<string>(), 7));
         Assert.Throws<ArgumentOutOfRangeException>(() => new WeekLayout(new[] { "Dushanba" }, 0));
     }
+
+    // ----- A timetable never contradicts the plan -----
+
+    /// <summary>5-A has Matematika (Karimov) twice on Monday and once on Tuesday; Fizika (Aliyev) on Monday; 5-B has Matematika (Karimov) on Monday too.</summary>
+    private static (School School, SchoolClass A, SchoolClass B, Subject Math, Subject Physics, Teacher Karimov, Teacher Aliyev) ScheduledSchool()
+    {
+        var school = NewSchool();
+        var a = school.AddClass("5-A");
+        var b = school.AddClass("5-B");
+        var math = school.AddSubject("Matematika", 3);
+        var physics = school.AddSubject("Fizika", 1);
+        var karimov = school.AddTeacher("Karimov");
+        var aliyev = school.AddTeacher("Aliyev");
+        school.Assign(karimov, math, a);
+        school.Assign(karimov, math, b);
+        school.Assign(aliyev, physics, a);
+
+        school.TimetableFor(a).Set(0, 0, new Lesson("Matematika", "Karimov"));
+        school.TimetableFor(a).Set(0, 1, new Lesson("Matematika", "Karimov"));
+        school.TimetableFor(a).Set(1, 0, new Lesson("Matematika", "Karimov"));
+        school.TimetableFor(a).Set(0, 2, new Lesson("Fizika", "Aliyev"));
+        school.TimetableFor(b).Set(0, 3, new Lesson("Matematika", "Karimov"));
+        return (school, a, b, math, physics, karimov, aliyev);
+    }
+
+    [Fact]
+    public void RemoveTeacher_RemovesTheirLessonsFromEveryTimetable()
+    {
+        var (school, a, b, _, _, karimov, _) = ScheduledSchool();
+
+        school.RemoveTeacher(karimov);
+
+        Assert.Equal(1, school.LessonCount());
+        Assert.Equal("Fizika", school.TimetableFor(a).Get(0, 2)?.Subject);
+        Assert.Null(school.TimetableFor(b).Get(0, 3));
+    }
+
+    [Fact]
+    public void RemovingATeacher_AndAddingTheSameNameAgain_DoesNotBringTheOldLessonsBack()
+    {
+        var (school, a, _, _, _, karimov, _) = ScheduledSchool();
+
+        school.RemoveTeacher(karimov);
+        school.AddTeacher("Karimov");
+
+        Assert.Null(school.TimetableFor(a).Get(0, 0));
+    }
+
+    [Fact]
+    public void RemoveSubject_RemovesItsLessonsFromEveryTimetable()
+    {
+        var (school, a, b, math, _, _, _) = ScheduledSchool();
+
+        school.RemoveSubject(math);
+
+        Assert.Equal(1, school.LessonCount());
+        Assert.Null(school.TimetableFor(b).Get(0, 3));
+        Assert.Equal("Fizika", school.TimetableFor(a).Get(0, 2)?.Subject);
+    }
+
+    [Fact]
+    public void Unassign_RemovesOnlyThatClassesLessonsOfThatSubject()
+    {
+        var (school, a, b, math, _, karimov, _) = ScheduledSchool();
+
+        school.Unassign(school.Assignments.First(x => x.Class == a && x.Subject == math));
+
+        Assert.Equal(2, school.LessonCount());
+        Assert.Equal("Matematika", school.TimetableFor(b).Get(0, 3)?.Subject);
+        Assert.Equal("Fizika", school.TimetableFor(a).Get(0, 2)?.Subject);
+    }
+
+    [Fact]
+    public void SetDayOff_RemovesThatTeachersLessonsOnThatDayOnly()
+    {
+        var (school, a, b, _, _, karimov, _) = ScheduledSchool();
+
+        school.SetDayOff(karimov, 0, true);
+
+        Assert.Equal("Matematika", school.TimetableFor(a).Get(1, 0)?.Subject); // Tuesday stays
+        Assert.Equal("Fizika", school.TimetableFor(a).Get(0, 2)?.Subject);     // another teacher stays
+        Assert.Null(school.TimetableFor(a).Get(0, 0));
+        Assert.Null(school.TimetableFor(a).Get(0, 1));
+        Assert.Null(school.TimetableFor(b).Get(0, 3));
+    }
+
+    [Fact]
+    public void SetDayOff_BackToWorking_RemovesNothing()
+    {
+        var (school, _, _, _, _, karimov, _) = ScheduledSchool();
+        school.SetDayOff(karimov, 3, true); // no lessons on Thursday
+
+        school.SetDayOff(karimov, 3, false);
+
+        Assert.Equal(5, school.LessonCount());
+    }
+
+    [Fact]
+    public void SetLessonsPerWeek_ForOneClass_RemovesThatClassesLessonsOfThatSubject()
+    {
+        var (school, a, b, math, _, _, _) = ScheduledSchool();
+
+        school.SetLessonsPerWeek(school.Assignments.First(x => x.Class == a && x.Subject == math), 2);
+
+        Assert.Equal(2, school.LessonCount());
+        Assert.Equal("Matematika", school.TimetableFor(b).Get(0, 3)?.Subject);
+    }
+
+    [Fact]
+    public void SetLessonsPerWeek_ToTheSameNumber_RemovesNothing()
+    {
+        var (school, a, _, math, _, _, _) = ScheduledSchool();
+
+        school.SetLessonsPerWeek(school.Assignments.First(x => x.Class == a && x.Subject == math), 3);
+
+        Assert.Equal(5, school.LessonCount());
+    }
+
+    [Fact]
+    public void SetLessonsPerWeek_ForTheSubject_RemovesLessonsOfClassesThatFollowedIt()
+    {
+        var (school, a, b, math, _, _, _) = ScheduledSchool();
+        school.SetLessonsPerWeek(school.Assignments.First(x => x.Class == b && x.Subject == math), 2); // 5-B has its own number
+
+        school.SetLessonsPerWeek(math, 4); // 5-A followed the usual 3, so it changes; 5-B keeps 2
+
+        Assert.Null(school.TimetableFor(a).Get(0, 0));
+        Assert.Equal("Fizika", school.TimetableFor(a).Get(0, 2)?.Subject);
+    }
+
+    [Fact]
+    public void Assign_ExistingWithAnotherNumber_RemovesItsLessons()
+    {
+        var (school, a, _, math, _, karimov, _) = ScheduledSchool();
+
+        school.Assign(karimov, math, a, lessonsPerWeek: 1);
+
+        Assert.Null(school.TimetableFor(a).Get(0, 0));
+        Assert.Equal(2, school.LessonCount());
+    }
+
+    [Fact]
+    public void LessonCount_AddsUpAllTimetables()
+    {
+        var (school, _, _, _, _, _, _) = ScheduledSchool();
+
+        Assert.Equal(5, school.LessonCount());
+        Assert.Equal(0, NewSchool().LessonCount());
+    }
 }

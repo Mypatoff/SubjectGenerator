@@ -161,6 +161,170 @@ public sealed class SchoolStorageTests : IDisposable
         Directory.CreateDirectory(_folder);
         File.WriteAllText(FilePath, "{\"Version\": 999}");
 
+        Assert.Throws<SchoolFileTooNewException>(() => SchoolStorage.Load(FilePath));
+    }
+
+    private School SchoolWith(params string[] classNames)
+    {
+        var school = new School(TestWeek.SixBySeven);
+        foreach (var name in classNames)
+            school.AddClass(name);
+        return school;
+    }
+
+    [Fact]
+    public void Save_KeepsThePreviousSaveAsBackup()
+    {
+        SchoolStorage.Save(SchoolWith("5-A"), FilePath);
+        SchoolStorage.Save(SchoolWith("5-A", "5-B"), FilePath);
+
+        Assert.Equal(2, SchoolStorage.Load(FilePath).Classes.Count);
+        Assert.Equal(1, SchoolStorage.Load(FilePath + ".bak").Classes.Count);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("{\"Version\": 3, \"Classes\": [\"5-A\"")] // cut off in the middle, as a power cut can leave it
+    [InlineData("not json at all")]
+    [InlineData("[1, 2, 3]")]
+    [InlineData("{\"Version\": \"three\"}")]
+    [InlineData("{\"Version\": 3, \"Week\": {\"Days\": [], \"LessonsPerDay\": 8}}")]
+    public void Load_DamagedFile_ThrowsInvalidData(string content)
+    {
+        Directory.CreateDirectory(_folder);
+        File.WriteAllText(FilePath, content);
+
         Assert.Throws<InvalidDataException>(() => SchoolStorage.Load(FilePath));
+    }
+
+    [Fact]
+    public void Load_UnreadableFile_IsNotReportedAsDamaged()
+    {
+        SchoolStorage.Save(SchoolWith("5-A"), FilePath);
+
+        using var lockedByAnotherProgram = new FileStream(FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+
+        Assert.Throws<IOException>(() => SchoolStorage.Load(FilePath));
+    }
+
+    [Fact]
+    public void LoadWithRecovery_GoodFile_ChangesNothing()
+    {
+        SchoolStorage.Save(SchoolWith("5-A"), FilePath);
+
+        var result = SchoolStorage.LoadWithRecovery(FilePath);
+
+        Assert.Equal(SchoolStorage.LoadOutcome.Loaded, result.Outcome);
+        Assert.Null(result.BrokenFilePath);
+        Assert.Equal("5-A", Assert.Single(result.School.Classes).Name);
+    }
+
+    [Fact]
+    public void LoadWithRecovery_DamagedFile_RestoresTheBackup_AndKeepsTheDamagedFile()
+    {
+        SchoolStorage.Save(SchoolWith("5-A"), FilePath);
+        SchoolStorage.Save(SchoolWith("5-A", "5-B"), FilePath);
+        File.WriteAllText(FilePath, ""); // what an unflushed save can leave after a power cut
+
+        var result = SchoolStorage.LoadWithRecovery(FilePath);
+
+        Assert.Equal(SchoolStorage.LoadOutcome.RestoredFromBackup, result.Outcome);
+        Assert.Equal("5-A", Assert.Single(result.School.Classes).Name);
+        Assert.True(File.Exists(result.BrokenFilePath));
+        // The restored school is on disk again, so the next start does not find "no file" and begin empty.
+        Assert.Equal("5-A", Assert.Single(SchoolStorage.Load(FilePath).Classes).Name);
+    }
+
+    [Fact]
+    public void LoadWithRecovery_DamagedFile_NoBackup_StartsEmpty_AndKeepsTheDamagedFile()
+    {
+        Directory.CreateDirectory(_folder);
+        File.WriteAllText(FilePath, "garbage");
+
+        var result = SchoolStorage.LoadWithRecovery(FilePath);
+
+        Assert.Equal(SchoolStorage.LoadOutcome.StartedEmpty, result.Outcome);
+        Assert.Empty(result.School.Classes);
+        Assert.Equal("garbage", File.ReadAllText(result.BrokenFilePath!));
+        Assert.False(File.Exists(FilePath));
+    }
+
+    [Fact]
+    public void LoadWithRecovery_DamagedFileAndDamagedBackup_StartsEmpty()
+    {
+        Directory.CreateDirectory(_folder);
+        File.WriteAllText(FilePath, "garbage");
+        File.WriteAllText(FilePath + ".bak", "also garbage");
+
+        var result = SchoolStorage.LoadWithRecovery(FilePath);
+
+        Assert.Equal(SchoolStorage.LoadOutcome.StartedEmpty, result.Outcome);
+    }
+
+    [Fact]
+    public void LoadWithRecovery_UnreadableFile_Throws_AndLeavesTheFileAlone()
+    {
+        SchoolStorage.Save(SchoolWith("5-A"), FilePath);
+
+        using (new FileStream(FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            Assert.Throws<IOException>(() => SchoolStorage.LoadWithRecovery(FilePath));
+
+        Assert.Equal("5-A", Assert.Single(SchoolStorage.Load(FilePath).Classes).Name);
+        Assert.Empty(Directory.GetFiles(_folder, "*.broken-*"));
+    }
+
+    [Fact]
+    public void LoadWithRecovery_FileFromNewerVersion_Throws_AndLeavesTheFileAlone()
+    {
+        Directory.CreateDirectory(_folder);
+        File.WriteAllText(FilePath, "{\"Version\": 999}");
+
+        Assert.Throws<SchoolFileTooNewException>(() => SchoolStorage.LoadWithRecovery(FilePath));
+
+        Assert.Equal("{\"Version\": 999}", File.ReadAllText(FilePath));
+        Assert.Empty(Directory.GetFiles(_folder, "*.broken-*"));
+    }
+
+    [Fact]
+    public void Load_AssignmentPointingAtSomethingMissing_IsSkipped_NotTheWholeFile()
+    {
+        Directory.CreateDirectory(_folder);
+        File.WriteAllText(FilePath, """
+            {
+              "Version": 3,
+              "Week": { "Days": ["Dushanba", "Seshanba"], "LessonsPerDay": 6 },
+              "Classes": ["5-A"],
+              "Subjects": [{ "Name": "Matematika", "LessonsPerWeek": 5 }],
+              "Teachers": [{ "Name": "Karimov", "DaysOff": [] }],
+              "Assignments": [
+                { "Teacher": "Karimov", "Subject": "Matematika", "Class": "5-A", "LessonsPerWeek": 5 },
+                { "Teacher": "Nobody", "Subject": "Matematika", "Class": "5-A", "LessonsPerWeek": 5 },
+                { "Teacher": "Karimov", "Subject": "Fizika", "Class": "5-A", "LessonsPerWeek": 2 },
+                { "Teacher": "Karimov", "Subject": "Matematika", "Class": "9-Z", "LessonsPerWeek": 5 },
+                { "Teacher": "Karimov", "Subject": "Matematika", "Class": "5-A", "LessonsPerWeek": 0 }
+              ],
+              "Lessons": []
+            }
+            """);
+
+        var school = SchoolStorage.Load(FilePath);
+
+        var assignment = Assert.Single(school.Assignments);
+        Assert.Equal("Karimov", assignment.Teacher.Name);
+    }
+
+    [Fact]
+    public void Load_OldFormat_KeepsACopyOfTheOldFile_AndDoesNotOverwriteIt()
+    {
+        Directory.CreateDirectory(_folder);
+        const string oldFile = "{\"Version\": 2, \"Classes\": [\"5-A\"], \"Subjects\": [], \"Teachers\": [], \"Assignments\": [], \"Lessons\": []}";
+        File.WriteAllText(FilePath, oldFile);
+
+        SchoolStorage.Load(FilePath);
+        SchoolStorage.Save(SchoolWith("changed"), FilePath);
+        SchoolStorage.Load(FilePath); // current format now: no new copy
+
+        Assert.Equal(oldFile, File.ReadAllText(FilePath + ".v2.bak"));
     }
 }

@@ -40,6 +40,13 @@ compiles the WPF app there too. Linux box: `dotnet test src/SubjectGenerator.Tes
       subject in which classes (one teacher per subject per class; a teacher can have many)
 - [x] Saving data: JSON at %AppData%\SubjectGenerator\school.json (`SchoolStorage`, format version 3
       with v1->v2->v3 migrations, saved after every change). Includes teachers' days off and timetables.
+      Safety: a save is flushed to disk and the previous one is kept as school.json.bak; a damaged file is put
+      aside as school.json.broken-* and the .bak is used; a file that is merely locked or from a newer app is
+      never touched and the app closes instead of starting empty; an old-format file is copied to
+      school.json.vN.bak before migrating; only one copy of the app can run (mutex in `App`).
+- [x] Timetables never contradict the plan: removing a teacher/subject/assignment, changing lessons per week
+      or adding a day off removes the affected lessons (`School.RemoveLessons`). Generating asks before
+      replacing a timetable with a worse one.
 - [x] Teacher days off (Settings > O'qituvchilar)
 - [x] Per-class lessons per week (Settings > Sinflar shows each class's plan and total)
 - [x] Week settings (Settings > Hafta)

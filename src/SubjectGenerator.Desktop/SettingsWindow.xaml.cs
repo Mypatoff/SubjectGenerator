@@ -87,7 +87,7 @@ public partial class SettingsWindow : Window
         var remove = new Button { Content = "✕", Style = (Style)FindResource("RowButton"), Margin = new Thickness(16, 0, 0, 0), ToolTip = "Olib tashlash" };
         remove.Click += (_, _) =>
         {
-            if (Confirm($"{assignment.Class.Name} sinfidan {assignment.Subject.Name} fani olib tashlansinmi?"))
+            if (Confirm($"{assignment.Class.Name} sinfidan {assignment.Subject.Name} fani olib tashlansinmi? Uning jadvaldagi darslari ham o'chadi."))
             {
                 TryChange(() => _school.Unassign(assignment));
                 RefreshPlans();
@@ -244,7 +244,7 @@ public partial class SettingsWindow : Window
     private void OnRemoveSubject(object sender, RoutedEventArgs e)
     {
         var subject = ItemOf<Subject>(sender);
-        if (!Confirm($"\"{subject.Name}\" fani o'chirilsinmi? Uni kim qaysi sinfda o'qitishi ham o'chadi."))
+        if (!Confirm($"\"{subject.Name}\" fani o'chirilsinmi? Uni kim qaysi sinfda o'qitishi va jadvaldagi darslari ham o'chadi."))
             return;
 
         TryChange(() => _school.RemoveSubject(subject));
@@ -288,7 +288,7 @@ public partial class SettingsWindow : Window
     private void OnRemoveTeacher(object sender, RoutedEventArgs e)
     {
         var teacher = ItemOf<Teacher>(sender);
-        if (!Confirm($"\"{teacher.Name}\" o'chirilsinmi? U o'qitadigan darslar o'qituvchisiz qoladi."))
+        if (!Confirm($"\"{teacher.Name}\" o'chirilsinmi? U o'qitadigan fanlar sinflardan olib tashlanadi va jadvaldagi darslari ham o'chadi."))
             return;
 
         TryChange(() => _school.RemoveTeacher(teacher));

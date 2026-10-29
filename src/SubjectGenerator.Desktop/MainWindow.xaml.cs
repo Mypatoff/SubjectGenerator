@@ -16,36 +16,14 @@ public partial class MainWindow : Window
     private static readonly Brush HeaderBrush = new SolidColorBrush(Color.FromRgb(0xEE, 0xF1, 0xF5));
     private static readonly Brush EmptySlotBrush = new SolidColorBrush(Color.FromRgb(0xFA, 0xFB, 0xFD));
 
-    private readonly School _school = LoadSchool();
+    private readonly School _school;
     private SchoolClass? _selectedClass;
 
-    public MainWindow()
+    public MainWindow(School school)
     {
+        _school = school;
         InitializeComponent();
         Refresh();
-    }
-
-    /// <summary>
-    /// Reads the saved school. If the file is broken, it is put aside (not deleted) and the app
-    /// starts with an empty school, so the user is never stuck.
-    /// </summary>
-    private static School LoadSchool()
-    {
-        var path = SchoolStorage.DefaultPath;
-        try
-        {
-            return SchoolStorage.Load(path);
-        }
-        catch (Exception ex)
-        {
-            var brokenPath = path + $".broken-{DateTime.Now:yyyyMMdd-HHmmss}";
-            File.Move(path, brokenPath);
-            MessageBox.Show(
-                $"Saqlangan ma'lumotlarni o'qib bo'lmadi, dastur bo'sh holda ochildi.\n" +
-                $"Eski fayl shu yerda saqlab qo'yildi:\n{brokenPath}\n\n{ex.Message}",
-                "SubjectGenerator", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return new School(WeekLayout.Default);
-        }
     }
 
     /// <summary>Shows the selected class again (or the first one), or the "no classes yet" message.</summary>
@@ -107,6 +85,15 @@ public partial class MainWindow : Window
             Root.IsEnabled = true;
             GenerateButtonText.Text = "⚡  Jadval tuzish";
         }
+
+        // Generating is a search and can come out worse than the timetable the school has now
+        // (for example after a teacher's day off was added). Do not throw a better timetable away unasked.
+        var currentLessons = _school.LessonCount();
+        if (result.Placements.Count < currentLessons && MessageBox.Show(this,
+                $"Yangi jadvalda {result.Placements.Count} ta dars joylashdi, hozirgisida esa {currentLessons} ta.\n" +
+                "Hozirgi jadvalni yangisi bilan almashtirasizmi?",
+                "Jadval tuzish", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
+            return;
 
         result.ApplyTo(_school);
         SaveSchool();

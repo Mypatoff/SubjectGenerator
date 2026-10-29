@@ -4,7 +4,8 @@ namespace SubjectGenerator.Core;
 /// Everything the school has: classes, subjects, teachers, who teaches what to which class (and how
 /// often), the shape of the week, and each class's timetable.
 /// All changes go through the methods here, so the data always follows the rules
-/// (unique names, no assignment pointing at something that was deleted).
+/// (unique names, no assignment pointing at something that was deleted, and no generated lesson
+/// that contradicts the plan: when a change makes a lesson impossible, that lesson leaves the timetable).
 /// </summary>
 public sealed class School
 {
@@ -115,8 +116,12 @@ public sealed class School
     public void SetLessonsPerWeek(Subject subject, int lessonsPerWeek)
     {
         CheckLessonsPerWeek(lessonsPerWeek);
-        foreach (var assignment in _assignments.Where(a => a.Subject == subject && a.LessonsPerWeek == subject.LessonsPerWeek))
+        foreach (var assignment in _assignments.Where(a => a.Subject == subject && a.LessonsPerWeek == subject.LessonsPerWeek).ToList())
+        {
+            if (assignment.LessonsPerWeek != lessonsPerWeek)
+                RemoveLessonsOf(assignment);
             assignment.LessonsPerWeek = lessonsPerWeek;
+        }
         subject.LessonsPerWeek = lessonsPerWeek;
     }
 
@@ -125,6 +130,7 @@ public sealed class School
     {
         _subjects.Remove(subject);
         _assignments.RemoveAll(a => a.Subject == subject);
+        RemoveLessons((_, _, lesson) => lesson.Subject == subject.Name);
     }
 
     // ----- Teachers -----
@@ -149,6 +155,8 @@ public sealed class School
             throw new SchoolRuleException($"{teacher.Name} haftada kamida bir kun ishlashi kerak.");
 
         teacher.SetDayOff(day, isOff);
+        if (isOff)
+            RemoveLessons((_, lessonDay, lesson) => lessonDay == day && lesson.Teacher == teacher.Name);
     }
 
     /// <summary>Removes the teacher and everything they were teaching.</summary>
@@ -156,6 +164,7 @@ public sealed class School
     {
         _teachers.Remove(teacher);
         _assignments.RemoveAll(a => a.Teacher == teacher);
+        RemoveLessons((_, _, lesson) => lesson.Teacher == teacher.Name);
     }
 
     public IEnumerable<TeachingAssignment> AssignmentsOf(Teacher teacher) =>
@@ -183,7 +192,7 @@ public sealed class School
         if (existing is not null && existing.Teacher == teacher)
         {
             if (lessonsPerWeek is not null)
-                existing.LessonsPerWeek = lessons;
+                SetLessonsPerWeek(existing, lessons);
             return existing;
         }
         if (existing is not null)
@@ -199,10 +208,16 @@ public sealed class School
     public void SetLessonsPerWeek(TeachingAssignment assignment, int lessonsPerWeek)
     {
         CheckLessonsPerWeek(lessonsPerWeek);
+        if (assignment.LessonsPerWeek != lessonsPerWeek)
+            RemoveLessonsOf(assignment);
         assignment.LessonsPerWeek = lessonsPerWeek;
     }
 
-    public void Unassign(TeachingAssignment assignment) => _assignments.Remove(assignment);
+    public void Unassign(TeachingAssignment assignment)
+    {
+        _assignments.Remove(assignment);
+        RemoveLessonsOf(assignment);
+    }
 
     /// <summary>Who teaches the subject in the class, or null if nobody has been chosen yet.</summary>
     public Teacher? TeacherOf(Subject subject, SchoolClass schoolClass) =>
@@ -228,17 +243,37 @@ public sealed class School
     public void ClearTimetables() => _timetables.Clear();
 
     /// <summary>True if any class has at least one lesson in its timetable.</summary>
-    public bool HasAnyLessons()
+    public bool HasAnyLessons() => LessonCount() > 0;
+
+    /// <summary>How many lessons all the timetables hold together.</summary>
+    public int LessonCount()
     {
+        var count = 0;
         foreach (var timetable in _timetables.Values)
             for (var day = 0; day < Layout.DayCount; day++)
                 for (var slot = 0; slot < Layout.SlotsPerDay; slot++)
                     if (timetable.Get(day, slot) is not null)
-                        return true;
-        return false;
+                        count++;
+        return count;
     }
 
     // ----- Helpers -----
+
+    /// <summary>
+    /// Empties every slot whose lesson <paramref name="matches"/> (given the class, the day and the lesson).
+    /// Lessons only remember names, so this is how a change to the plan keeps the timetables honest.
+    /// </summary>
+    private void RemoveLessons(Func<SchoolClass, int, Lesson, bool> matches)
+    {
+        foreach (var (schoolClass, timetable) in _timetables)
+            for (var day = 0; day < Layout.DayCount; day++)
+                for (var slot = 0; slot < Layout.SlotsPerDay; slot++)
+                    if (timetable.Get(day, slot) is { } lesson && matches(schoolClass, day, lesson))
+                        timetable.Set(day, slot, null);
+    }
+
+    private void RemoveLessonsOf(TeachingAssignment assignment) => RemoveLessons((schoolClass, _, lesson) =>
+        schoolClass == assignment.Class && lesson.Subject == assignment.Subject.Name && lesson.Teacher == assignment.Teacher.Name);
 
     private void CheckLessonsPerWeek(int lessonsPerWeek)
     {
