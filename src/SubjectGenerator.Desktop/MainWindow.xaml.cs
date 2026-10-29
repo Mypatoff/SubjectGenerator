@@ -1,5 +1,9 @@
+using System;
+using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using SubjectGenerator.Core;
 
@@ -11,21 +15,141 @@ public partial class MainWindow : Window
     private static readonly Brush HeaderBrush = new SolidColorBrush(Color.FromRgb(0xEE, 0xF1, 0xF5));
     private static readonly Brush EmptySlotBrush = new SolidColorBrush(Color.FromRgb(0xFA, 0xFB, 0xFD));
 
-    private readonly School _school = School.CreateSample();
+    private readonly School _school = LoadSchool();
+    private SchoolClass? _selectedClass;
 
     public MainWindow()
     {
         InitializeComponent();
-
-        ClassList.ItemsSource = _school.Classes;
-        ClassList.SelectedIndex = 0;
+        Refresh();
     }
 
-    private void OnClassSelected(object sender, SelectionChangedEventArgs e)
+    /// <summary>
+    /// Reads the saved school. If the file is broken, it is put aside (not deleted) and the app
+    /// starts with an empty school, so the user is never stuck.
+    /// </summary>
+    private static School LoadSchool()
     {
-        if (ClassList.SelectedItem is SchoolClass schoolClass)
-            ShowTimetable(_school.TimetableFor(schoolClass));
+        var path = SchoolStorage.DefaultPath;
+        try
+        {
+            return SchoolStorage.Load(path, WeekLayout.Default);
+        }
+        catch (Exception ex)
+        {
+            var brokenPath = path + $".broken-{DateTime.Now:yyyyMMdd-HHmmss}";
+            File.Move(path, brokenPath);
+            MessageBox.Show(
+                $"Saqlangan ma'lumotlarni o'qib bo'lmadi, dastur bo'sh holda ochildi.\n" +
+                $"Eski fayl shu yerda saqlab qo'yildi:\n{brokenPath}\n\n{ex.Message}",
+                "SubjectGenerator", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return new School(WeekLayout.Default);
+        }
     }
+
+    /// <summary>Shows the selected class again (or the first one), or the "no classes yet" message.</summary>
+    private void Refresh()
+    {
+        if (_selectedClass is null || !_school.Classes.Contains(_selectedClass))
+            _selectedClass = _school.Classes.FirstOrDefault();
+
+        var hasClasses = _selectedClass is not null;
+        ClassPickerButton.IsEnabled = hasClasses;
+        WeekGridBox.Visibility = hasClasses ? Visibility.Visible : Visibility.Collapsed;
+        NoClassesMessage.Visibility = hasClasses ? Visibility.Collapsed : Visibility.Visible;
+
+        if (_selectedClass is null)
+        {
+            ClassPickerText.Text = "-";
+            ClassTitle.Text = "";
+            return;
+        }
+
+        ClassPickerText.Text = _selectedClass.Name;
+        ShowTimetable(_school.TimetableFor(_selectedClass));
+    }
+
+    private void OnSettingsClick(object sender, RoutedEventArgs e)
+    {
+        new SettingsWindow(_school) { Owner = this }.ShowDialog();
+        Refresh();
+    }
+
+    // ----- Class picker (the drop-down list with a search box) -----
+
+    private void OnClassPopupOpened(object? sender, EventArgs e)
+    {
+        // While the list is open, a click on the button should only close it (StaysOpen="False" does that),
+        // not close and then open it again.
+        ClassPickerButton.IsHitTestVisible = false;
+
+        ClassSearch.Text = "";
+        FillClassList();
+        ClassSearch.Focus();
+    }
+
+    private void OnClassPopupClosed(object? sender, EventArgs e) => ClassPickerButton.IsHitTestVisible = true;
+
+    private void OnClassSearchChanged(object sender, TextChangedEventArgs e)
+    {
+        ClassSearchHint.Visibility = ClassSearch.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        FillClassList();
+    }
+
+    /// <summary>Puts the classes whose name contains the search text into the list.</summary>
+    private void FillClassList()
+    {
+        var search = ClassSearch.Text.Trim();
+        var matches = _school.Classes
+            .Where(c => c.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase))
+            .ToList();
+
+        ClassList.ItemsSource = matches;
+        ClassList.SelectedItem = matches.Contains(_selectedClass!) ? _selectedClass : matches.FirstOrDefault();
+        NoClassesFound.Visibility = matches.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>Arrow keys move through the list while typing in the search box, Enter opens the class.</summary>
+    private void OnClassSearchKeyDown(object sender, KeyEventArgs e)
+    {
+        var count = ClassList.Items.Count;
+        switch (e.Key)
+        {
+            case Key.Down when count > 0:
+                ClassList.SelectedIndex = Math.Min(ClassList.SelectedIndex + 1, count - 1);
+                ClassList.ScrollIntoView(ClassList.SelectedItem);
+                e.Handled = true;
+                break;
+            case Key.Up when count > 0:
+                ClassList.SelectedIndex = Math.Max(ClassList.SelectedIndex - 1, 0);
+                ClassList.ScrollIntoView(ClassList.SelectedItem);
+                e.Handled = true;
+                break;
+            case Key.Enter:
+                ChooseClass(ClassList.SelectedItem as SchoolClass);
+                e.Handled = true;
+                break;
+            case Key.Escape:
+                ClassPickerButton.IsChecked = false;
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void OnClassListClicked(object sender, MouseButtonEventArgs e) =>
+        ChooseClass(ClassList.SelectedItem as SchoolClass);
+
+    private void ChooseClass(SchoolClass? schoolClass)
+    {
+        if (schoolClass is null)
+            return;
+
+        _selectedClass = schoolClass;
+        ClassPickerButton.IsChecked = false;
+        Refresh();
+    }
+
+    // ----- Week grid -----
 
     /// <summary>Redraws the week grid: day names across the top, lesson numbers down the side.</summary>
     private void ShowTimetable(ClassTimetable timetable)

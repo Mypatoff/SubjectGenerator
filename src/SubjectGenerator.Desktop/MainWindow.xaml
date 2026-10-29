@@ -7,25 +7,50 @@
         Background="#F5F7FA" FontSize="14">
 
     <Window.Resources>
-        <!-- A class in the top row: looks like a button, blue when it is the selected class. -->
-        <Style x:Key="ClassChip" TargetType="ListBoxItem">
-            <Setter Property="Margin" Value="0,0,6,6"/>
+        <!-- A plain white button with a thin border, used for the class picker and the settings button. -->
+        <Style x:Key="ToolbarButton" TargetType="ButtonBase">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="#25364D"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate TargetType="ListBoxItem">
-                        <Border x:Name="Chip" Background="White" BorderBrush="#C9D1DC" BorderThickness="1"
-                                CornerRadius="6" Padding="14,6" MinWidth="60" Cursor="Hand">
-                            <TextBlock x:Name="Label" Text="{Binding Name}" FontWeight="SemiBold"
-                                       Foreground="#25364D" HorizontalAlignment="Center"/>
+                    <ControlTemplate TargetType="ButtonBase">
+                        <Border x:Name="Box" Background="{TemplateBinding Background}" BorderBrush="#C9D1DC"
+                                BorderThickness="1" CornerRadius="6" Padding="12,7">
+                            <ContentPresenter VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Chip" Property="Background" Value="#E3EAF5"/>
+                                <Setter TargetName="Box" Property="Background" Value="#E3EAF5"/>
+                            </Trigger>
+                            <Trigger Property="ToggleButton.IsChecked" Value="True">
+                                <Setter TargetName="Box" Property="BorderBrush" Value="#2F5FD0"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- One row in the class list: a check mark in front of the class that is open now. -->
+        <Style x:Key="ClassRow" TargetType="ListBoxItem">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Row" Background="Transparent" CornerRadius="4" Padding="8,7">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="Check" Text="✓" Width="20" Foreground="#2F5FD0"
+                                           FontWeight="Bold" Visibility="Hidden"/>
+                                <TextBlock Text="{Binding Name}" Foreground="#25364D"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Row" Property="Background" Value="#EEF2F8"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Chip" Property="Background" Value="#2F5FD0"/>
-                                <Setter TargetName="Chip" Property="BorderBrush" Value="#2F5FD0"/>
-                                <Setter TargetName="Label" Property="Foreground" Value="White"/>
+                                <Setter TargetName="Check" Property="Visibility" Value="Visible"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -35,28 +60,78 @@
     </Window.Resources>
 
     <DockPanel Margin="16">
-        <TextBlock DockPanel.Dock="Top" Text="Sinflar" FontSize="13" FontWeight="SemiBold"
-                   Foreground="#5B6B82" Margin="0,0,0,6"/>
+        <!-- Top bar: class picker on the left, settings on the right. -->
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+            <Button DockPanel.Dock="Right" Style="{StaticResource ToolbarButton}" Click="OnSettingsClick">
+                <TextBlock Text="⚙  Sozlamalar" FontWeight="SemiBold"/>
+            </Button>
 
-        <ListBox x:Name="ClassList" DockPanel.Dock="Top" Background="Transparent" BorderThickness="0"
-                 ItemContainerStyle="{StaticResource ClassChip}"
-                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                 SelectionChanged="OnClassSelected">
-            <ListBox.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <WrapPanel/>
-                </ItemsPanelTemplate>
-            </ListBox.ItemsPanel>
-        </ListBox>
+            <StackPanel Orientation="Horizontal">
+                <!-- The class picker: shows the open class; a click drops down a searchable list. -->
+                <ToggleButton x:Name="ClassPickerButton" Style="{StaticResource ToolbarButton}" MinWidth="150">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Sinf: " Foreground="#5B6B82"/>
+                        <TextBlock x:Name="ClassPickerText" FontWeight="SemiBold"/>
+                        <TextBlock Text="  ▾" Foreground="#5B6B82"/>
+                    </StackPanel>
+                </ToggleButton>
+
+                <Popup x:Name="ClassPopup" PlacementTarget="{Binding ElementName=ClassPickerButton}"
+                       Placement="Bottom" VerticalOffset="4" StaysOpen="False" AllowsTransparency="True"
+                       IsOpen="{Binding IsChecked, ElementName=ClassPickerButton, Mode=TwoWay}"
+                       Opened="OnClassPopupOpened" Closed="OnClassPopupClosed">
+                    <Border Background="White" BorderBrush="#C9D1DC" BorderThickness="1" CornerRadius="8"
+                            Width="260" Margin="0,0,8,8">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.2"/>
+                        </Border.Effect>
+                        <StackPanel>
+                            <TextBlock Text="Sinfni tanlang" FontWeight="SemiBold" Foreground="#25364D"
+                                       Margin="12,10,12,8"/>
+                            <Grid Margin="10,0,10,8">
+                                <TextBox x:Name="ClassSearch" Padding="6,5" BorderBrush="#2F5FD0"
+                                         TextChanged="OnClassSearchChanged" PreviewKeyDown="OnClassSearchKeyDown"/>
+                                <!-- Grey hint text, hidden as soon as something is typed. -->
+                                <TextBlock x:Name="ClassSearchHint" Text="🔍 Qidirish..." Foreground="#9AA6B8"
+                                           Margin="9,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                            </Grid>
+                            <Border BorderBrush="#E3E8EF" BorderThickness="0,1,0,0">
+                                <Grid>
+                                    <ListBox x:Name="ClassList" MaxHeight="320" BorderThickness="0" Margin="4"
+                                             ItemContainerStyle="{StaticResource ClassRow}"
+                                             PreviewMouseLeftButtonUp="OnClassListClicked"/>
+                                    <TextBlock x:Name="NoClassesFound" Text="Hech narsa topilmadi" Foreground="#9AA6B8"
+                                               Margin="12,10" Visibility="Collapsed"/>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </Popup>
+            </StackPanel>
+        </DockPanel>
 
         <TextBlock x:Name="ClassTitle" DockPanel.Dock="Top" FontSize="22" FontWeight="Bold"
-                   Foreground="#25364D" Margin="0,10,0,10"/>
+                   Foreground="#25364D" Margin="0,0,0,10"/>
 
-        <Border Background="White" BorderBrush="#C9D1DC" BorderThickness="1" CornerRadius="6">
-            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
-                <!-- Filled in code, because the number of days and slots comes from WeekLayout. -->
-                <Grid x:Name="WeekGrid"/>
-            </ScrollViewer>
-        </Border>
+        <Grid>
+            <Border x:Name="WeekGridBox" Background="White" BorderBrush="#C9D1DC" BorderThickness="1" CornerRadius="6">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                    <!-- Filled in code, because the number of days and slots comes from WeekLayout. -->
+                    <Grid x:Name="WeekGrid"/>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Shown instead of the grid while the school has no classes. -->
+            <StackPanel x:Name="NoClassesMessage" VerticalAlignment="Center" HorizontalAlignment="Center"
+                        Visibility="Collapsed">
+                <TextBlock Text="Hali sinflar qo'shilmagan" FontSize="20" FontWeight="SemiBold"
+                           Foreground="#25364D" HorizontalAlignment="Center"/>
+                <TextBlock Text="Sinflar, fanlar va o'qituvchilarni qo'shish uchun &quot;Sozlamalar&quot;ni oching."
+                           Foreground="#5B6B82" Margin="0,6,0,14" HorizontalAlignment="Center"/>
+                <Button Style="{StaticResource ToolbarButton}" HorizontalAlignment="Center" Click="OnSettingsClick">
+                    <TextBlock Text="⚙  Sozlamalarni ochish" FontWeight="SemiBold"/>
+                </Button>
+            </StackPanel>
+        </Grid>
     </DockPanel>
 </Window>

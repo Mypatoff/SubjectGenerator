@@ -20,7 +20,8 @@ plus a single-file `SubjectGenerator.exe`, both on the "latest" release).
 - Any future database model change must ship with its migration in the same change.
 
 ## Dev environment
-Linux box: `dotnet test src/SubjectGenerator.Tests` works. `dotnet build` of the whole solution does not
+Owner's Windows PC (E:\projects\SubjectGenerator) has the .NET 8 SDK, so `dotnet build SubjectGenerator.sln`
+compiles the WPF app there too. Linux box: `dotnet test src/SubjectGenerator.Tests` works. `dotnet build` of the whole solution does not
 (WPF needs Windows), and `dotnet sln add` refuses the Desktop project - edit the .sln by hand.
 
 ## Product decisions so far
@@ -30,8 +31,10 @@ Linux box: `dotnet test src/SubjectGenerator.Tests` works. `dotnet build` of the
   timetables is wanted.
 
 ## Progress
-- [x] Main screen: class chips on top, empty week grid for the selected class (sample 1-A..10-B classes)
-- [ ] Screens to enter classes, subjects, teachers, teacher-subject pairs
-- [ ] Saving data
+- [x] Main screen: searchable class drop-down on top, week grid for the selected class, Settings button
+- [x] Settings window: classes, subjects (lessons per week), teachers, which teacher teaches which
+      subject in which classes (one teacher per subject per class; a teacher can have many)
+- [x] Saving data: JSON at %AppData%\SubjectGenerator\school.json (`SchoolStorage`, format version 1,
+      saved after every change). Timetables are not saved yet.
 - [ ] Timetable generation
 - [ ] Manual editing of slots
