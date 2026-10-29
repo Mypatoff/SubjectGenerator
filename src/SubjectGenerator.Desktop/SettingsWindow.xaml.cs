@@ -296,7 +296,19 @@ public partial class SettingsWindow : Window
         RefreshClassPlan();
     }
 
-    private void OnTeacherSelected(object sender, SelectionChangedEventArgs e) => RefreshTeacherDetails();
+    /// <summary>
+    /// Shows the new teacher. The subject box jumps to a subject they teach, so their classes are ticked
+    /// right away (instead of a subject someone else teaches, with every box greyed out).
+    /// </summary>
+    private void OnTeacherSelected(object sender, SelectionChangedEventArgs e)
+    {
+        var teacher = SelectedTeacher;
+        var taughtSubject = teacher is null ? null : _school.AssignmentsOf(teacher).Select(a => a.Subject).FirstOrDefault();
+        if (taughtSubject is not null && SelectedTeacherSubject != taughtSubject)
+            TeacherSubjectPicker.SelectedItem = taughtSubject; // this redraws the details through OnTeacherSubjectSelected
+        else
+            RefreshTeacherDetails();
+    }
 
     private void OnTeacherSubjectSelected(object sender, SelectionChangedEventArgs e) => RefreshTeacherDetails();
 
