@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Timetable.Core;
 
@@ -50,6 +51,10 @@ public static class AppUpdater
     {
         var path = Path.Combine(Path.GetTempPath(), UpdateChecker.InstallerFileName);
 
+        // Fetched first, so a release without a usable checksum is refused before a 45 MB download.
+        var checksumList = await Http.GetStringAsync(update.ChecksumsUrl);
+        var expectedHash = UpdateChecker.ExpectedHash(checksumList, UpdateChecker.InstallerFileName);
+
         using (var response = await Http.GetAsync(update.InstallerUrl, HttpCompletionOption.ResponseHeadersRead))
         {
             response.EnsureSuccessStatusCode();
@@ -73,6 +78,16 @@ public static class AppUpdater
         {
             File.Delete(path);
             throw new IOException("Yuklab olingan fayl to'liq emas.");
+        }
+
+        // The file must be exactly the one the build published.
+        string actualHash;
+        await using (var file = File.OpenRead(path))
+            actualHash = Convert.ToHexString(await SHA256.HashDataAsync(file));
+        if (!UpdateChecker.HashMatches(actualHash, expectedHash))
+        {
+            File.Delete(path);
+            throw new InvalidDataException("Yuklab olingan fayl tekshiruvdan o'tmadi (nusxa buzilgan), shuning uchun o'chirildi.");
         }
         return path;
     }

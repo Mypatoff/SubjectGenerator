@@ -8,17 +8,23 @@ public class UpdateCheckerTests
     private const string InstallerUrl =
         "https://github.com/Mypatoff/timetable/releases/download/latest/Timetable-Setup.exe";
 
+    private const string ChecksumsUrl =
+        "https://github.com/Mypatoff/timetable/releases/download/latest/SHA256SUMS.txt";
+
     private static string ReleaseJson(string name = "Latest build 1.0.42", string assetName = "Timetable-Setup.exe",
-        string url = InstallerUrl) => $$"""
+        string url = InstallerUrl, string checksumsName = "SHA256SUMS.txt", string checksumsUrl = ChecksumsUrl) => $$"""
         {
           "name": "{{name}}",
           "html_url": "https://github.com/Mypatoff/timetable/releases/tag/latest",
           "assets": [
             { "name": "Timetable.exe", "size": 5, "browser_download_url": "https://github.com/x/Timetable.exe" },
-            { "name": "{{assetName}}", "size": 123456, "browser_download_url": "{{url}}" }
+            { "name": "{{assetName}}", "size": 123456, "browser_download_url": "{{url}}" },
+            { "name": "{{checksumsName}}", "size": 200, "browser_download_url": "{{checksumsUrl}}" }
           ]
         }
         """;
+
+    private const string Hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     [Fact]
     public void ParseRelease_ReadsVersionAndInstaller()
@@ -28,7 +34,43 @@ public class UpdateCheckerTests
         Assert.Equal(new Version(1, 0, 42), info.Version);
         Assert.Equal(InstallerUrl, info.InstallerUrl);
         Assert.Equal(123456, info.InstallerSize);
+        Assert.Equal(ChecksumsUrl, info.ChecksumsUrl);
         Assert.EndsWith("/tag/latest", info.PageUrl);
+    }
+
+    [Fact]
+    public void ParseRelease_NoChecksumFile_Throws() =>
+        Assert.Throws<InvalidDataException>(() => UpdateChecker.ParseRelease(ReleaseJson(checksumsName: "Other.txt")));
+
+    [Fact]
+    public void ParseRelease_NonHttpsChecksumLink_Throws() =>
+        Assert.Throws<InvalidDataException>(() =>
+            UpdateChecker.ParseRelease(ReleaseJson(checksumsUrl: "http://example.com/SHA256SUMS.txt")));
+
+    [Theory]
+    [InlineData($"{Hash}  Timetable-Setup.exe")]
+    [InlineData($"{Hash} *Timetable-Setup.exe")]
+    [InlineData($"ffff\n{Hash}  Timetable-Setup.exe\r\n{Hash}  Timetable.exe\r\n")]
+    public void ExpectedHash_FindsTheInstallerLine(string list) =>
+        Assert.Equal(Hash, UpdateChecker.ExpectedHash(list, "Timetable-Setup.exe"));
+
+    [Fact]
+    public void ExpectedHash_IsLowerCase() =>
+        Assert.Equal(Hash, UpdateChecker.ExpectedHash($"{Hash.ToUpperInvariant()}  Timetable-Setup.exe", "Timetable-Setup.exe"));
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("garbage")]
+    [InlineData($"{Hash}  Timetable.exe")]                          // another file's line
+    [InlineData("zzzz456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  Timetable-Setup.exe")] // not hex
+    public void ExpectedHash_MissingOrBroken_Throws(string list) =>
+        Assert.Throws<InvalidDataException>(() => UpdateChecker.ExpectedHash(list, "Timetable-Setup.exe"));
+
+    [Fact]
+    public void HashMatches_IgnoresCase_AndRejectsOtherHashes()
+    {
+        Assert.True(UpdateChecker.HashMatches(Hash.ToUpperInvariant(), Hash));
+        Assert.False(UpdateChecker.HashMatches(new string('0', 64), Hash));
     }
 
     [Fact]

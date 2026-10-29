@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace Timetable.Core;
 
 /// <summary>The newest release found on GitHub: its version and where to download the installer.</summary>
-public sealed record UpdateInfo(Version Version, string InstallerUrl, long InstallerSize, string PageUrl);
+public sealed record UpdateInfo(Version Version, string InstallerUrl, long InstallerSize, string ChecksumsUrl, string PageUrl);
 
 /// <summary>
 /// Works out from the GitHub "latest" release whether a newer version exists.
@@ -17,6 +17,9 @@ public static class UpdateChecker
 {
     public const string ReleaseApiUrl = "https://api.github.com/repos/Mypatoff/timetable/releases/tags/latest";
     public const string InstallerFileName = "Timetable-Setup.exe";
+
+    /// <summary>"hash  file name" lines (sha256sum format) made by the build workflow.</summary>
+    public const string ChecksumFileName = "SHA256SUMS.txt";
 
     /// <summary>Reads GitHub's JSON answer for a release. Throws <see cref="InvalidDataException"/> if it is not usable.</summary>
     public static UpdateInfo ParseRelease(string json)
@@ -36,19 +39,50 @@ public static class UpdateChecker
         var version = TryParseVersion(name)
                       ?? throw new InvalidDataException($"The release name \"{name}\" has no version number.");
 
-        var installer = (release["assets"] as JsonArray)?
-            .OfType<JsonObject>()
-            .FirstOrDefault(a => (string?)a["name"] == InstallerFileName)
+        var assets = (release["assets"] as JsonArray)?.OfType<JsonObject>().ToList() ?? new List<JsonObject>();
+        var installer = assets.FirstOrDefault(a => (string?)a["name"] == InstallerFileName)
             ?? throw new InvalidDataException($"The release has no {InstallerFileName}.");
+        var checksums = assets.FirstOrDefault(a => (string?)a["name"] == ChecksumFileName)
+            ?? throw new InvalidDataException($"The release has no {ChecksumFileName}, so the download cannot be checked.");
 
-        // The installer is started with administrator rights, so it must come over HTTPS.
-        var url = (string?)installer["browser_download_url"] ?? "";
-        if (!url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("The installer link is not an HTTPS link.");
+        // The installer is started, so both files must come over HTTPS.
+        var url = HttpsLink(installer, "installer");
+        var checksumsUrl = HttpsLink(checksums, "checksum");
 
         var size = (long?)installer["size"] ?? 0;
-        return new UpdateInfo(version, url, size, pageUrl);
+        return new UpdateInfo(version, url, size, checksumsUrl, pageUrl);
     }
+
+    private static string HttpsLink(JsonObject asset, string what)
+    {
+        var url = (string?)asset["browser_download_url"] ?? "";
+        if (!url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"The {what} link is not an HTTPS link.");
+        return url;
+    }
+
+    /// <summary>
+    /// The SHA-256 the checksum list gives for a file. Lines look like "hash  file name" (or "hash *file name").
+    /// Throws <see cref="InvalidDataException"/> if the file is not listed.
+    /// </summary>
+    public static string ExpectedHash(string checksumList, string fileName)
+    {
+        foreach (var raw in checksumList.Split('\n'))
+        {
+            var line = raw.Trim();
+            if (line.Length <= 65 || line[64] != ' ')
+                continue;
+
+            var hash = line[..64];
+            var name = line[65..].TrimStart(' ', '*');
+            if (name == fileName && hash.All(Uri.IsHexDigit))
+                return hash.ToLowerInvariant();
+        }
+        throw new InvalidDataException($"{ChecksumFileName} does not list {fileName}.");
+    }
+
+    public static bool HashMatches(string actualHash, string expectedHash) =>
+        string.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase);
 
     public static bool IsNewer(Version latest, Version current) => latest > current;
 

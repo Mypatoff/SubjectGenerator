@@ -59,7 +59,9 @@ compiles the WPF app there too. Linux box: `dotnet test src/Timetable.Tests` wor
 - [ ] Manual editing of slots
 - [x] Update button (main screen, "Yangilash"): reads the "latest" release from the GitHub API, compares its
       version (release name "Latest build 1.0.N") with the version stamped into the app, downloads
-      Timetable-Setup.exe and runs it silently (Windows asks permission only for an all-users install); the installer reopens the app.
+      Timetable-Setup.exe and runs it with `/SILENT` (a small progress window, no wizard pages; Windows asks permission
+      only for an all-users install); the installer reopens the app. The download is checked against the release's
+      SHA256SUMS.txt (made by the build workflow) and deleted if it does not match; a release without that file is refused.
       Parsing/comparing is `UpdateChecker` in Core (tested); download/launch is `AppUpdater` in Desktop.
       The single-file Timetable.exe (no unins000.exe next to it) only opens the release page.
       The installer is not code-signed yet: consider signing before selling.
