@@ -277,7 +277,7 @@ public static class TimetableGenerator
             var ties = 0;
             for (var g = 0; g < _groups.Length; g++)
             {
-                if (_waiting[g] == 0 || !HasAnyUsableSpot(g))
+                if (_waiting[g] == 0 || !HasAnyUsableSpot(g) || ClassIsFull(g) || TeacherIsFull(g))
                     continue;
                 var count = CountFreeSpots(g, fewest);
                 if (count < fewest)
@@ -385,6 +385,34 @@ public static class TimetableGenerator
                         if (_allowed[_groupClass[g], d, k])
                             return true;
             return false;
+        }
+
+        /// <summary>
+        /// Every usable slot of the group's class is taken. A waiting lesson could then only push out
+        /// another lesson of the same class, which never helps: the class simply has more lessons than
+        /// slots. Without this check such a class would keep pushing its own lessons around forever and
+        /// the other classes would never get their turn.
+        /// </summary>
+        private bool ClassIsFull(int g)
+        {
+            var c = _groupClass[g];
+            for (var d = 0; d < _days; d++)
+                for (var k = 0; k < _slots; k++)
+                    if (_allowed[c, d, k] && _classSlot[c, d, k] == Empty)
+                        return false;
+            return true;
+        }
+
+        /// <summary>Same idea for a teacher: every slot on their working days is taken (they have too many lessons).</summary>
+        private bool TeacherIsFull(int g)
+        {
+            var t = _groupTeacher[g];
+            for (var d = 0; d < _days; d++)
+                if (!_teacherOff[t, d])
+                    for (var k = 0; k < _slots; k++)
+                        if (_teacherSlot[t, d, k] == Empty)
+                            return false;
+            return true;
         }
 
         /// <summary>Counts free spots, stopping early once there are more than <paramref name="stopAt"/>.</summary>

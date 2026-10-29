@@ -152,6 +152,32 @@ public class TimetableGeneratorTests
     }
 
     [Fact]
+    public void OverloadedClass_DoesNotStopOtherClassesFromBeingPlaced()
+    {
+        // 5-A needs 45 lessons in a 42-slot week. That must not keep 5-B (and its shared teacher) from being placed.
+        var school = new School(WeekLayout.Default);
+        var a = school.AddClass("5-A");
+        var b = school.AddClass("5-B");
+        var english = school.AddSubject("Ingliz tili", 30);
+        var russian = school.AddSubject("Rus tili", 27);
+        var math = school.AddSubject("Matematika", 15);
+        var karimov = school.AddTeacher("Karimov");
+        school.Assign(school.AddTeacher("Aliyev"), english, a);
+        school.Assign(karimov, math, a);
+        school.Assign(school.AddTeacher("Rahimov"), russian, b);
+        school.Assign(karimov, math, b);
+
+        var watch = Stopwatch.StartNew();
+        var result = TimetableGenerator.Generate(school, seed: 12);
+
+        Assert.Equal(42, result.Placements.Count(p => p.Class == b));
+        Assert.Equal(42, result.Placements.Count(p => p.Class == a));
+        Assert.Equal(3, result.UnplacedLessons);
+        Assert.Contains(result.Problems, p => p.Contains("5-A") && p.Contains("42"));
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(3), $"Took {watch.Elapsed}");
+    }
+
+    [Fact]
     public void SubjectWithoutTeacher_IsReportedAndSkipped()
     {
         var school = new School(WeekLayout.Default);
