@@ -227,7 +227,7 @@ public partial class MainWindow : Window
     {
         var search = ClassSearch.Text.Trim();
         var matches = _school.Classes
-            .Where(c => c.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase))
+            .Where(c => c.Name.IndexOf(search, StringComparison.CurrentCultureIgnoreCase) >= 0)
             .ToList();
 
         ClassList.ItemsSource = matches;

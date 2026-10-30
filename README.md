@@ -10,6 +10,11 @@ Every push to `main` builds on GitHub: see the **latest** release for `Timetable
 (installer) and `Timetable.exe` (single file, no install).
 An installed app updates itself with the **Yangilash** button on the main screen.
 
+### Windows 7
+`Timetable-Win7-Setup.exe` (same release) is a separate build for Windows 7 SP1 and newer. It needs .NET Framework 4.8
+on the PC (Windows 10/11 already have it; on Windows 7 install it first). It installs next to, not over, the normal
+Timetable, uses the same data folder, and updates itself from `Timetable-Win7-Setup.exe`.
+
 ## Develop
 `dotnet test src/Timetable.Tests` runs the Core tests anywhere. The WPF app (`src/Timetable.Desktop`)
 builds on Windows only; GitHub Actions builds it.

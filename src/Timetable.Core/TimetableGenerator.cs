@@ -58,7 +58,7 @@ public static class TimetableGenerator
     public static GenerationResult Generate(School school, int? seed = null)
     {
         var problems = new List<string>();
-        var usedSeed = seed ?? Random.Shared.Next(1, 1_000_000);
+        var usedSeed = seed ?? new Random().Next(1, 1_000_000);
         var random = new Random(usedSeed);
         var search = new Search(school, random);
 
@@ -244,9 +244,10 @@ public static class TimetableGenerator
         private void SetUpMode(bool compact)
         {
             _compact = compact;
-            Array.Clear(_allowed);
-            Array.Fill(_extraSlot, Empty);
-            Array.Clear(_extraDays);
+            Array.Clear(_allowed, 0, _allowed.Length);
+            for (var i = 0; i < _extraSlot.Length; i++)
+                _extraSlot[i] = Empty;
+            Array.Clear(_extraDays, 0, _extraDays.Length);
 
             for (var c = 0; c < _classes; c++)
             {
@@ -283,8 +284,8 @@ public static class TimetableGenerator
         {
             Fill(_classSlot, Empty);
             Fill(_teacherSlot, Empty);
-            Array.Clear(_groupPerDay);
-            Array.Clear(_extraUsed);
+            Array.Clear(_groupPerDay, 0, _groupPerDay.Length);
+            Array.Clear(_extraUsed, 0, _extraUsed.Length);
             Array.Copy(_groupSize, _waiting, _groupSize.Length);
             _placedCount = 0;
         }

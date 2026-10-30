@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The Windows 7 build: the same source files as Timetable.Core, compiled for .NET Framework 4.8
+       (the newest .NET that runs on Windows 7). Nothing is copied: edit the files in Timetable.Core. -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>Timetable.Core</AssemblyName>
+    <RootNamespace>Timetable.Core</RootNamespace>
+    <LangVersion>12</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <DefineConstants>$(DefineConstants);WIN7</DefineConstants>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Timetable.Core\*.cs" Link="%(Filename)%(Extension)" />
+    <Compile Include="Compat.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <!-- Lets newer C# features (records, ranges, nullable attributes) compile for .NET Framework. -->
+    <PackageReference Include="PolySharp" Version="1.14.1" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

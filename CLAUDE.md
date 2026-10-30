@@ -11,6 +11,10 @@ plus a single-file `Timetable.exe`, both on the "latest" release).
 - Timetable.Core: school data and timetable logic (plain .NET, builds anywhere)
 - Timetable.Desktop: WPF app (Windows only)
 - Timetable.Tests: tests for Core
+- Timetable.Core.Win7 / Timetable.Desktop.Win7: the Windows 7 build (.NET Framework 4.8). They contain no code of their
+  own: they compile the files of Core / Desktop (linked). Keep shared code free of .NET-8-only APIs (e.g. Array.Fill,
+  Random.Shared, string.Contains(x, comparison), `await using`); `Compat.cs` fills a few gaps. Output is
+  Timetable-Win7.exe + Timetable-Win7-Setup.exe (installer/Timetable-Win7.iss, own AppId). Not in Timetable.sln.
 
 ## Rules
 - Keep code simple and readable; the owner is learning.

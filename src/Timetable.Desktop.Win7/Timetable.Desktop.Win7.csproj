@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The Windows 7 build of the app: the same source files and screens as Timetable.Desktop, compiled for
+       .NET Framework 4.8. Nothing is copied: edit the files in Timetable.Desktop. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>12</LangVersion>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>Timetable.Desktop</RootNamespace>
+    <AssemblyName>Timetable-Win7</AssemblyName>
+    <Product>Timetable</Product>
+    <AssemblyTitle>Timetable (Windows 7)</AssemblyTitle>
+    <ApplicationIcon>..\Timetable.Desktop\Assets\Timetable.ico</ApplicationIcon>
+    <DefineConstants>$(DefineConstants);WIN7</DefineConstants>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultPageItems>false</EnableDefaultPageItems>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Timetable.Desktop\*.cs" Link="%(Filename)%(Extension)" />
+    <ApplicationDefinition Include="..\Timetable.Desktop\App.xaml" Link="App.xaml" />
+    <Page Include="..\Timetable.Desktop\MainWindow.xaml" Link="MainWindow.xaml" />
+    <Page Include="..\Timetable.Desktop\SettingsWindow.xaml" Link="SettingsWindow.xaml" />
+    <Resource Include="..\Timetable.Desktop\Assets\Timetable.ico" Link="Assets\Timetable.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Net.Http" />
+    <ProjectReference Include="..\Timetable.Core.Win7\Timetable.Core.Win7.csproj" />
+    <PackageReference Include="PolySharp" Version="1.14.1" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

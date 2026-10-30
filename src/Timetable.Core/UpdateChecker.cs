@@ -16,7 +16,12 @@ public sealed record UpdateInfo(Version Version, string InstallerUrl, long Insta
 public static class UpdateChecker
 {
     public const string ReleaseApiUrl = "https://api.github.com/repos/Mypatoff/timetable/releases/tags/latest";
+#if WIN7
+    // The Windows 7 build (.NET Framework) updates itself from its own installer.
+    public const string InstallerFileName = "Timetable-Win7-Setup.exe";
+#else
     public const string InstallerFileName = "Timetable-Setup.exe";
+#endif
 
     /// <summary>"hash  file name" lines (sha256sum format) made by the build workflow.</summary>
     public const string ChecksumFileName = "SHA256SUMS.txt";

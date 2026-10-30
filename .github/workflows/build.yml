@@ -41,12 +41,20 @@ jobs:
       - name: Build the installer (Timetable-Setup.exe)
         run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=1.0.${{ github.run_number }}" installer\Timetable.iss'
 
+      # The Windows 7 build: the same source, compiled for .NET Framework 4.8 (the newest .NET that runs on Windows 7).
+      # It is a separate program with its own installer and updates itself from Timetable-Win7-Setup.exe.
+      - name: Build the Windows 7 app
+        run: dotnet publish src/Timetable.Desktop.Win7/Timetable.Desktop.Win7.csproj -c Release -p:Version=1.0.${{ github.run_number }} -p:DebugType=None -o publish/win7
+
+      - name: Build the Windows 7 installer (Timetable-Win7-Setup.exe)
+        run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=1.0.${{ github.run_number }}" installer\Timetable-Win7.iss'
+
       # The app's Update button downloads this list and checks the installer against it before running it
       # (sha256sum format: "hash  file name").
       - name: Make checksums
         shell: pwsh
         run: |
-          $lines = foreach ($file in 'dist/Timetable-Setup.exe', 'publish/desktop/Timetable.exe') {
+          $lines = foreach ($file in 'dist/Timetable-Setup.exe', 'publish/desktop/Timetable.exe', 'dist/Timetable-Win7-Setup.exe') {
             $hash = (Get-FileHash -Algorithm SHA256 $file).Hash.ToLower()
             "$hash  $(Split-Path $file -Leaf)"
           }
@@ -64,6 +72,12 @@ jobs:
         with:
           name: Timetable
           path: publish/desktop/Timetable.exe
+
+      - name: Upload Windows 7 installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Timetable-Win7-Setup
+          path: dist/Timetable-Win7-Setup.exe
 
       # The release action does not move an existing tag, so without this the "latest" tag (and the source
       # shown on the release page) could stay on an old commit.
@@ -85,4 +99,5 @@ jobs:
           files: |
             dist/Timetable-Setup.exe
             publish/desktop/Timetable.exe
+            dist/Timetable-Win7-Setup.exe
             SHA256SUMS.txt

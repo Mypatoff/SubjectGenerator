@@ -17,6 +17,10 @@ public static class AppUpdater
 
     private static HttpClient CreateClient()
     {
+#if WIN7
+        // .NET Framework on Windows 7 does not use TLS 1.2 (the only kind GitHub accepts) unless told to.
+        System.Net.ServicePointManager.SecurityProtocol |= (System.Net.SecurityProtocolType)3072;
+#endif
         // GitHub refuses requests that have no User-Agent.
         var client = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
         client.DefaultRequestHeaders.UserAgent.ParseAdd("Timetable-Updater");
@@ -58,15 +62,15 @@ public static class AppUpdater
         using (var response = await Http.GetAsync(update.InstallerUrl, HttpCompletionOption.ResponseHeadersRead))
         {
             response.EnsureSuccessStatusCode();
-            await using var source = await response.Content.ReadAsStreamAsync();
-            await using var target = File.Create(path);
+            using var source = await response.Content.ReadAsStreamAsync();
+            using var target = File.Create(path);
 
             var buffer = new byte[81920];
             long done = 0;
             int read;
-            while ((read = await source.ReadAsync(buffer)) > 0)
+            while ((read = await source.ReadAsync(buffer, 0, buffer.Length)) > 0)
             {
-                await target.WriteAsync(buffer.AsMemory(0, read));
+                await target.WriteAsync(buffer, 0, read);
                 done += read;
                 if (update.InstallerSize > 0)
                     onPercent((int)(done * 100 / update.InstallerSize));
@@ -82,8 +86,9 @@ public static class AppUpdater
 
         // The file must be exactly the one the build published.
         string actualHash;
-        await using (var file = File.OpenRead(path))
-            actualHash = Convert.ToHexString(await SHA256.HashDataAsync(file));
+        using (var file = File.OpenRead(path))
+        using (var sha = SHA256.Create())
+            actualHash = BitConverter.ToString(sha.ComputeHash(file)).Replace("-", "");
         if (!UpdateChecker.HashMatches(actualHash, expectedHash))
         {
             File.Delete(path);
